@@ -1,73 +1,41 @@
-# React + TypeScript + Vite
+# Nexdo (Todo List)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript + Vite 기반 투두/프로젝트 관리 UI입니다.
 
-Currently, two official plugins are available:
+## 로컬 실행
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### 요구사항
+- Node.js `^20.19.0 || >=22.12.0` (Vite 7 요구사항)
+- npm (lockfile 기준으로 `npm install` / `npm ci` 사용)
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 설치
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 개발 서버 (디버깅용, 비-미니파이 에러 메시지)
+```bash
+npm run dev
 ```
+- 기본 접속: `http://localhost:5173`
+
+### 프로덕션 빌드/프리뷰 (배포 환경과 최대한 동일)
+```bash
+npm run build
+npm run preview
+```
+- 기본 접속: `http://localhost:4173`
+
+### 품질 체크
+```bash
+npm run lint
+```
+
+## 디버깅 팁
+- 배포 환경에서 `Minified React error #...`가 나오면 로컬에서 `npm run dev`로 재현하면 풀 에러/스택을 확인할 수 있습니다.
+- 라우팅/렌더링 중 예외가 발생하면 `errorElement`로 커스텀 에러 페이지(`src/pages/ErrorPage.tsx`)가 표시됩니다.
+
+## 데이터 저장
+- 현재 데이터는 브라우저 `localStorage`에 저장됩니다.
+  - `nexdo-tasks`
+  - `nexdo-projects`
