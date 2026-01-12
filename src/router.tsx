@@ -5,11 +5,13 @@ import Inbox from './pages/Inbox';
 import Today from './pages/Today';
 import Project from './pages/Project';
 import NotFound from './pages/NotFound';
+import ErrorPage from './pages/ErrorPage';
 
 export const router = createBrowserRouter([
   {
     path: '/',
     element: <MainLayout />,
+    errorElement: <ErrorPage />,
     children: [
       { index: true, element: <Home /> },
       { path: 'inbox', element: <Inbox /> },
