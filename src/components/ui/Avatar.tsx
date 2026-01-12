@@ -7,6 +7,7 @@ interface AvatarProps {
   showStatus?: boolean;
   status?: 'online' | 'offline' | 'away';
   className?: string;
+  hideBorder?: boolean;
 }
 
 const sizeStyles = {
@@ -47,6 +48,7 @@ export function Avatar({
   showStatus = false,
   status = 'online',
   className,
+  hideBorder = false,
 }: AvatarProps) {
   const imageUrl = src || getAvatarUrl(name);
 
@@ -57,7 +59,8 @@ export function Avatar({
         alt={name}
         title={name}
         className={cn(
-          'rounded-full border border-slate-200 object-cover',
+          'rounded-full object-cover',
+          !hideBorder && 'border border-slate-200',
           sizeStyles[size]
         )}
         onError={(e) => {
@@ -96,31 +99,39 @@ interface AvatarStackProps {
   className?: string;
 }
 
+const stackSizeStyles = {
+  sm: 'h-6 w-6 text-[10px]',
+  md: 'h-8 w-8 text-xs',
+};
+
 export function AvatarStack({ avatars, max = 3, size = 'sm', className }: AvatarStackProps) {
   const visible = avatars.slice(0, max);
   const remaining = avatars.length - max;
 
   return (
-    <div className={cn('flex -space-x-1.5', className)}>
+    <span className={cn('flex -space-x-1.5', className)}>
       {visible.map((avatar, index) => (
-        <Avatar
+        <img
           key={index}
-          src={avatar.src}
-          name={avatar.name}
-          size={size}
-          className="ring-2 ring-white"
+          className={cn(
+            'inline-block rounded-full ring-2 ring-white object-cover',
+            stackSizeStyles[size]
+          )}
+          src={avatar.src || `https://ui-avatars.com/api/?name=${encodeURIComponent(avatar.name)}&background=random&size=64`}
+          alt={avatar.name}
+          title={avatar.name}
         />
       ))}
       {remaining > 0 && (
-        <span
+        <div
           className={cn(
-            'flex items-center justify-center rounded-full ring-2 ring-white bg-slate-100 text-slate-500 font-medium',
-            size === 'sm' ? 'w-6 h-6 text-[10px]' : 'w-8 h-8 text-xs'
+            'inline-flex items-center justify-center rounded-full ring-2 ring-white bg-slate-100 text-slate-500 font-medium',
+            stackSizeStyles[size]
           )}
         >
           +{remaining}
-        </span>
+        </div>
       )}
-    </div>
+    </span>
   );
 }
