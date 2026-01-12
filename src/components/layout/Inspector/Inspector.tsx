@@ -3,7 +3,7 @@ import { InspectorHeader } from './InspectorHeader';
 import { TaskDetails } from './TaskDetails';
 import { PropertyGrid } from './PropertyGrid';
 import { SubtaskList } from './SubtaskList';
-import { ActivityFeed, CommentInput } from './ActivityFeed';
+import { ActivityFeed } from './ActivityFeed';
 
 export function Inspector() {
   const selectedTaskId = useUIStore((s) => s.selectedTaskId);
@@ -27,8 +27,6 @@ export function Inspector() {
 
         <ActivityFeed />
       </div>
-
-      <CommentInput />
     </aside>
   );
 }

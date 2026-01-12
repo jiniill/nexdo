@@ -25,8 +25,6 @@ export function Sidebar() {
     >
       <SidebarHeader />
 
-      <QuickCapture />
-
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-6 scrollbar-thin">
         {/* Favorites */}
         <NavSection title="Favorites">
@@ -55,6 +53,10 @@ export function Sidebar() {
           <NavLink to="/assigned" icon={User} label="Assigned to me" />
           <NavLink to="/overdue" icon={Clock} label="Overdue" />
         </NavSection>
+      </div>
+
+      <div className="px-3 pb-3">
+        <QuickCapture />
       </div>
 
       <UserProfile />

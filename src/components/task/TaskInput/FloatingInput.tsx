@@ -1,71 +1,399 @@
-import { useState } from 'react';
-import { Plus, ArrowUp } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Plus, ArrowUp, Flag, User, Hash, ChevronDown, AlertCircle } from 'lucide-react';
 import { useTaskStore } from '../../../store';
+import { cn } from '../../../lib/cn';
 
 interface FloatingInputProps {
   projectId?: string;
 }
 
+type Priority = 'urgent' | 'high' | 'medium' | 'low' | 'none';
+
+const priorityOptions: { value: Priority; label: string; color: string }[] = [
+  { value: 'urgent', label: '긴급', color: 'text-red-600 bg-red-50' },
+  { value: 'high', label: '높음', color: 'text-amber-600 bg-amber-50' },
+  { value: 'medium', label: '보통', color: 'text-blue-600 bg-blue-50' },
+  { value: 'low', label: '낮음', color: 'text-slate-600 bg-slate-50' },
+  { value: 'none', label: '없음', color: 'text-slate-400 bg-slate-50' },
+];
+
+const projectOptions = [
+  { id: 'q1-launch', name: 'Q1 제품 런칭', color: 'bg-blue-500' },
+  { id: 'marketing', name: '마케팅 리브랜딩', color: 'bg-emerald-500' },
+  { id: 'design-system', name: '디자인 시스템 2.0', color: 'bg-purple-500' },
+];
+
+const assigneeOptions = [
+  { id: 'kim', name: 'Kim' },
+  { id: 'park', name: 'Park' },
+  { id: 'lee', name: 'Lee' },
+];
+
 export function FloatingInput({ projectId }: FloatingInputProps) {
   const [value, setValue] = useState('');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpandedContentMounted, setIsExpandedContentMounted] = useState(false);
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<Priority>('none');
+  const [selectedProject, setSelectedProject] = useState<string | null>(projectId || null);
+  const [selectedAssignee, setSelectedAssignee] = useState<string | null>(null);
+  const [dueDate, setDueDate] = useState('');
+
+  const [showPriorityMenu, setShowPriorityMenu] = useState(false);
+  const [showProjectMenu, setShowProjectMenu] = useState(false);
+  const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
+
+  const inputRef = useRef<HTMLInputElement>(null);
   const addTask = useTaskStore((s) => s.addTask);
+
+  const handleOpen = useCallback(() => {
+    setIsExpandedContentMounted(true);
+    setIsExpanded(true);
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setIsExpanded(false);
+    setValue('');
+    setDescription('');
+    setPriority('none');
+    setSelectedProject(projectId || null);
+    setSelectedAssignee(null);
+    setDueDate('');
+    setShowPriorityMenu(false);
+    setShowProjectMenu(false);
+    setShowAssigneeMenu(false);
+  }, [projectId]);
 
   const handleSubmit = () => {
     if (value.trim()) {
-      // 간단한 자연어 파싱 (추후 고도화)
-      let title = value.trim();
-      let priority: 'urgent' | 'high' | 'medium' | 'low' | 'none' = 'none';
-
-      if (title.includes('!높음') || title.includes('!high')) {
-        priority = 'high';
-        title = title.replace(/!높음|!high/g, '').trim();
-      } else if (title.includes('!긴급') || title.includes('!urgent')) {
-        priority = 'urgent';
-        title = title.replace(/!긴급|!urgent/g, '').trim();
-      }
-
-      addTask(title, { projectId, priority });
-      setValue('');
+      addTask(value.trim(), {
+        projectId: selectedProject || undefined,
+        priority,
+        dueDate: dueDate || undefined,
+        description: description || undefined,
+      });
+      handleClose();
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit();
     }
   };
 
+  useEffect(() => {
+    if (isExpanded && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isExpanded]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && isExpanded) {
+        handleClose();
+      }
+      if (e.key === 'c' && !isExpanded && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        handleOpen();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleClose, handleOpen, isExpanded]);
+
+  useEffect(() => {
+    if (isExpanded) return;
+    if (!isExpandedContentMounted) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setIsExpandedContentMounted(false);
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isExpanded, isExpandedContentMounted]);
+
+  const currentPriority = priorityOptions.find(p => p.value === priority);
+  const currentProject = projectOptions.find(p => p.id === selectedProject);
+  const currentAssignee = assigneeOptions.find(a => a.id === selectedAssignee);
+  const isPanelExpandedUI = isExpanded || isExpandedContentMounted;
+
   return (
-    <div className="absolute bottom-6 left-6 right-6 lg:left-20 lg:right-20">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 p-2 flex items-center gap-3 ring-1 ring-slate-900/5">
-        <div className="p-2 bg-slate-100 rounded-lg text-slate-500">
-          <Plus className="w-5 h-5" />
-        </div>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="새로운 태스크 입력... (예: 내일 오후 3시 디자인 리뷰 #업무 !높음)"
-          className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-sm py-2 placeholder:text-slate-400 font-medium"
+    <>
+      {/* Backdrop (main content only) */}
+      {isExpandedContentMounted && (
+        <div
+          className={cn(
+            'absolute inset-0 z-40 bg-slate-900/30 transition-opacity duration-200',
+            isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          )}
+          onClick={handleClose}
         />
-        <div className="flex items-center gap-1 text-slate-400 pr-2">
-          <span className="text-[10px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
-            #Project
-          </span>
-          <span className="text-[10px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
-            @Person
-          </span>
-          <button
-            onClick={handleSubmit}
-            disabled={!value.trim()}
-            className="bg-primary-600 hover:bg-primary-700 disabled:bg-slate-300 text-white p-1.5 rounded-lg transition-colors ml-2 shadow-sm"
+      )}
+
+      {/* Expanding Input Panel */}
+      <div className="absolute bottom-6 left-6 right-6 lg:left-20 lg:right-20 z-50">
+        <div
+          className={cn(
+            'bg-white rounded-xl shadow-2xl border border-slate-200 ring-1 ring-slate-900/5 overflow-hidden flex flex-col transition-[height] duration-350 ease-in-out',
+            isExpanded ? 'h-[min(420px,60vh)]' : 'h-[72px]'
+          )}
+        >
+          {/* Title Row */}
+          <div
+            className={cn(
+              'p-2 flex items-center gap-3',
+              isPanelExpandedUI && 'border-b border-slate-200'
+            )}
           >
-            <ArrowUp className="w-4 h-4" />
-          </button>
+            <button
+              onClick={() => (isPanelExpandedUI ? handleClose() : handleOpen())}
+              aria-label={isPanelExpandedUI ? '입력 닫기' : '새 태스크 추가'}
+              className={cn(
+                'p-2 rounded-lg transition-colors',
+                isPanelExpandedUI
+                  ? 'bg-primary-50 text-primary-600 hover:bg-primary-100'
+                  : 'bg-slate-100 text-slate-500 hover:bg-primary-100 hover:text-primary-600'
+              )}
+            >
+              <Plus className={cn('w-5 h-5 transition-transform duration-300', isPanelExpandedUI && 'rotate-45')} />
+            </button>
+
+            <input
+              ref={inputRef}
+              type="text"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={handleTitleKeyDown}
+              onFocus={handleOpen}
+              placeholder={isPanelExpandedUI ? '태스크 제목' : '새로운 태스크 입력... (예: 내일 오후 3시 디자인 리뷰 #업무 !높음)'}
+              className={cn(
+                'flex-1 bg-transparent border-none focus:ring-0 focus:outline-none font-medium placeholder:text-slate-400',
+                isPanelExpandedUI ? 'text-lg py-2' : 'text-sm py-2'
+              )}
+            />
+
+            <div className="flex items-center gap-1 text-slate-400 pr-2">
+              {!isPanelExpandedUI && (
+                <>
+                  <span className="text-[10px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
+                    #Project
+                  </span>
+                  <span className="text-[10px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
+                    @Person
+                  </span>
+                </>
+              )}
+              <button
+                onClick={handleSubmit}
+                disabled={!value.trim()}
+                className="bg-primary-600 hover:bg-primary-700 disabled:bg-slate-300 text-white p-1.5 rounded-lg transition-colors ml-2 shadow-sm"
+              >
+                <ArrowUp className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Expanded Content */}
+          {isExpandedContentMounted && (
+            <div
+              className={cn(
+                'transition-opacity duration-200 flex flex-col flex-1 min-h-0',
+                isExpanded ? 'opacity-100' : 'opacity-0'
+              )}
+            >
+              <div className="p-4 space-y-4 flex-1 overflow-y-auto min-h-0 scrollbar-thin">
+                {/* Description */}
+                <div>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="설명 추가 (선택)"
+                    rows={3}
+                    className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 resize-none placeholder:text-slate-400"
+                  />
+                </div>
+
+                {/* Properties */}
+                <div className="flex flex-wrap gap-2">
+                  {/* Priority */}
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setShowPriorityMenu(!showPriorityMenu);
+                        setShowProjectMenu(false);
+                        setShowAssigneeMenu(false);
+                      }}
+                      className={cn(
+                        'flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-lg border transition-all',
+                        priority !== 'none'
+                          ? currentPriority?.color + ' border-current'
+                          : 'text-slate-600 border-slate-200 hover:border-slate-300'
+                      )}
+                    >
+                      <Flag className="w-3.5 h-3.5" />
+                      {currentPriority?.label || '우선순위'}
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    {showPriorityMenu && (
+                      <div className="absolute top-full left-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-10">
+                        {priorityOptions.map(opt => (
+                          <button
+                            key={opt.value}
+                            onClick={() => {
+                              setPriority(opt.value);
+                              setShowPriorityMenu(false);
+                            }}
+                            className={cn(
+                              'w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50 flex items-center gap-2',
+                              priority === opt.value && 'bg-slate-50'
+                            )}
+                          >
+                            <AlertCircle className={cn('w-3.5 h-3.5', opt.color.split(' ')[0])} />
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Project */}
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setShowProjectMenu(!showProjectMenu);
+                        setShowPriorityMenu(false);
+                        setShowAssigneeMenu(false);
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 rounded-lg border border-slate-200 hover:border-slate-300 transition-all"
+                    >
+                      {currentProject ? (
+                        <>
+                          <span className={cn('w-2 h-2 rounded-full', currentProject.color)} />
+                          {currentProject.name}
+                        </>
+                      ) : (
+                        <>
+                          <Hash className="w-3.5 h-3.5" />
+                          프로젝트
+                        </>
+                      )}
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    {showProjectMenu && (
+                      <div className="absolute top-full left-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-10">
+                        <button
+                          onClick={() => {
+                            setSelectedProject(null);
+                            setShowProjectMenu(false);
+                          }}
+                          className="w-full px-3 py-1.5 text-sm text-left text-slate-400 hover:bg-slate-50"
+                        >
+                          없음
+                        </button>
+                        {projectOptions.map(proj => (
+                          <button
+                            key={proj.id}
+                            onClick={() => {
+                              setSelectedProject(proj.id);
+                              setShowProjectMenu(false);
+                            }}
+                            className={cn(
+                              'w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50 flex items-center gap-2',
+                              selectedProject === proj.id && 'bg-slate-50'
+                            )}
+                          >
+                            <span className={cn('w-2 h-2 rounded-full', proj.color)} />
+                            {proj.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Assignee */}
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setShowAssigneeMenu(!showAssigneeMenu);
+                        setShowPriorityMenu(false);
+                        setShowProjectMenu(false);
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 rounded-lg border border-slate-200 hover:border-slate-300 transition-all"
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      {currentAssignee?.name || '담당자'}
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    {showAssigneeMenu && (
+                      <div className="absolute top-full left-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-10">
+                        <button
+                          onClick={() => {
+                            setSelectedAssignee(null);
+                            setShowAssigneeMenu(false);
+                          }}
+                          className="w-full px-3 py-1.5 text-sm text-left text-slate-400 hover:bg-slate-50"
+                        >
+                          없음
+                        </button>
+                        {assigneeOptions.map(user => (
+                          <button
+                            key={user.id}
+                            onClick={() => {
+                              setSelectedAssignee(user.id);
+                              setShowAssigneeMenu(false);
+                            }}
+                            className={cn(
+                              'w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50',
+                              selectedAssignee === user.id && 'bg-slate-50'
+                            )}
+                          >
+                            {user.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Due Date */}
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 rounded-lg border border-slate-200 hover:border-slate-300 transition-all bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50">
+                <div className="text-xs text-slate-400">
+                  <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded">ESC</kbd>
+                  <span className="ml-1">닫기</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleClose}
+                    className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800 transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!value.trim()}
+                    className="px-4 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 disabled:bg-slate-300 text-white rounded-lg transition-colors font-medium"
+                  >
+                    태스크 만들기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    </>
   );
 }
