@@ -1,8 +1,10 @@
 import { createWithEqualityFn as create } from 'zustand/traditional';
-import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { v4 as uuidv4 } from 'uuid';
 import type { Task, Priority } from '../types';
+import { useActivityStore } from './activityStore';
+import { useUserStore } from './userStore';
+import { taskRepository } from '../data/repositories';
 
 interface TaskState {
   tasks: Record<string, Task>;
@@ -17,10 +19,14 @@ interface TaskState {
       priority?: Priority;
       dueDate?: string;
       description?: string;
+      assigneeIds?: string[];
+      labels?: string[];
     }
   ) => string;
   updateTask: (id: string, updates: Partial<Task>) => void;
-  deleteTask: (id: string) => void;
+  deleteTask: (id: string) => void; // soft delete
+  restoreTask: (id: string) => void;
+  hardDeleteTask: (id: string) => void;
   toggleComplete: (id: string) => void;
   moveTask: (id: string, newParentId: string | null, index?: number) => void;
 
@@ -31,18 +37,29 @@ interface TaskState {
   getTasksByProject: (projectId: string) => Task[];
   getInboxTasks: () => Task[];
   getTodayTasks: () => Task[];
+  getDeletedRootTasks: () => Task[];
 }
 
 export const useTaskStore = create<TaskState>()(
-  persist(
-    immer((set, get) => ({
-      tasks: {},
-      rootTaskIds: [],
+  immer((set, get) => {
+    const initial = taskRepository.load();
+
+    return {
+      tasks: initial.tasks,
+      rootTaskIds: initial.rootTaskIds,
 
       addTask: (title, options = {}) => {
         const id = uuidv4();
         const now = new Date().toISOString();
-        const { parentId, projectId, priority = 'none', dueDate, description } = options;
+        const {
+          parentId,
+          projectId,
+          priority = 'none',
+          dueDate,
+          description,
+          assigneeIds = [],
+          labels = [],
+        } = options;
 
         set((state) => {
           const depth = parentId ? (state.tasks[parentId]?.depth ?? 0) + 1 : 0;
@@ -60,8 +77,8 @@ export const useTaskStore = create<TaskState>()(
             updatedAt: now,
             dueDate,
             projectId,
-            assigneeIds: [],
-            labels: [],
+            assigneeIds,
+            labels,
           };
 
           state.tasks[id] = newTask;
@@ -73,10 +90,22 @@ export const useTaskStore = create<TaskState>()(
           }
         });
 
+        useActivityStore.getState().addActivity({
+          taskId: id,
+          type: 'created',
+          actorUserId: useUserStore.getState().currentUserId,
+        });
+
         return id;
       },
 
       updateTask: (id, updates) => {
+        const previous = get().tasks[id];
+        if (!previous) return;
+
+        const previousStatusId = previous.statusId;
+        const actorUserId = useUserStore.getState().currentUserId;
+
         set((state) => {
           if (state.tasks[id]) {
             state.tasks[id] = {
@@ -86,9 +115,94 @@ export const useTaskStore = create<TaskState>()(
             };
           }
         });
+
+        if (updates.statusId && updates.statusId !== previousStatusId) {
+          useActivityStore.getState().addActivity({
+            taskId: id,
+            type: 'status_change',
+            actorUserId,
+            fromStatusId: previousStatusId,
+            toStatusId: updates.statusId,
+          });
+        }
+
+        const has = (key: keyof Task) => Object.prototype.hasOwnProperty.call(updates, key);
+
+        const changes: string[] = [];
+
+        if (has('title') && updates.title !== undefined && updates.title !== previous.title) {
+          changes.push(`title: "${previous.title}" → "${updates.title}"`);
+        }
+
+        if (has('description') && updates.description !== previous.description) {
+          changes.push(
+            `description: ${previous.description ? 'set' : 'empty'} → ${updates.description ? 'set' : 'empty'}`
+          );
+        }
+
+        if (has('priority') && updates.priority !== previous.priority) {
+          changes.push(`priority: ${previous.priority} → ${updates.priority}`);
+        }
+
+        if (has('dueDate') && updates.dueDate !== previous.dueDate) {
+          changes.push(`due date: ${previous.dueDate ?? 'none'} → ${updates.dueDate ?? 'none'}`);
+        }
+
+        if (has('assigneeIds')) {
+          const next = updates.assigneeIds ?? [];
+          const prev = previous.assigneeIds ?? [];
+          const equal =
+            next.length === prev.length && next.every((v, idx) => v === prev[idx]);
+          if (!equal) {
+            changes.push(`assignees: ${prev.length} → ${next.length}`);
+          }
+        }
+
+        if (changes.length > 0) {
+          useActivityStore.getState().addActivity({
+            taskId: id,
+            type: 'updated',
+            actorUserId,
+            content: changes.join('\n'),
+          });
+        }
       },
 
       deleteTask: (id) => {
+        const now = new Date().toISOString();
+
+        set((state) => {
+          const markRecursive = (taskId: string) => {
+            const task = state.tasks[taskId];
+            if (!task) return;
+
+            task.deletedAt = now;
+            task.updatedAt = now;
+            task.childIds.forEach(markRecursive);
+          };
+
+          markRecursive(id);
+        });
+      },
+
+      restoreTask: (id) => {
+        const now = new Date().toISOString();
+
+        set((state) => {
+          const restoreRecursive = (taskId: string) => {
+            const task = state.tasks[taskId];
+            if (!task) return;
+
+            delete task.deletedAt;
+            task.updatedAt = now;
+            task.childIds.forEach(restoreRecursive);
+          };
+
+          restoreRecursive(id);
+        });
+      },
+
+      hardDeleteTask: (id) => {
         set((state) => {
           const deleteRecursive = (taskId: string) => {
             const task = state.tasks[taskId];
@@ -105,6 +219,7 @@ export const useTaskStore = create<TaskState>()(
               state.rootTaskIds = state.rootTaskIds.filter((rid) => rid !== taskId);
             }
 
+            useActivityStore.getState().clearTask(taskId);
             delete state.tasks[taskId];
           };
 
@@ -113,17 +228,26 @@ export const useTaskStore = create<TaskState>()(
       },
 
       toggleComplete: (id) => {
-        set((state) => {
-          const task = state.tasks[id];
-          if (!task) return;
+        const task = get().tasks[id];
+        if (!task) return;
+        const wasDone = task.statusId === 'done';
 
-          const isDone = task.statusId === 'done';
-          const newStatus = isDone ? 'todo' : 'done';
+        set((state) => {
+          const draft = state.tasks[id];
+          if (!draft) return;
+
+          const newStatus = wasDone ? 'todo' : 'done';
           const now = new Date().toISOString();
 
-          task.statusId = newStatus;
-          task.updatedAt = now;
-          task.completedAt = isDone ? undefined : now;
+          draft.statusId = newStatus;
+          draft.updatedAt = now;
+          draft.completedAt = wasDone ? undefined : now;
+        });
+
+        useActivityStore.getState().addActivity({
+          taskId: id,
+          type: wasDone ? 'reopened' : 'completed',
+          actorUserId: useUserStore.getState().currentUserId,
         });
       },
 
@@ -195,22 +319,32 @@ export const useTaskStore = create<TaskState>()(
 
       getTasksByProject: (projectId) => {
         const state = get();
-        return Object.values(state.tasks).filter((t) => t.projectId === projectId);
+        return Object.values(state.tasks).filter((t) => t.projectId === projectId && !t.deletedAt);
       },
 
       getInboxTasks: () => {
         const state = get();
-        return Object.values(state.tasks).filter((t) => !t.projectId && !t.parentId);
+        return Object.values(state.tasks).filter((t) => !t.projectId && !t.parentId && !t.deletedAt);
       },
 
       getTodayTasks: () => {
         const state = get();
         const today = new Date().toISOString().split('T')[0];
         return Object.values(state.tasks).filter(
-          (t) => t.dueDate && t.dueDate.startsWith(today) && t.statusId !== 'done'
+          (t) => t.dueDate && t.dueDate.startsWith(today) && t.statusId !== 'done' && !t.deletedAt
         );
       },
-    })),
-    { name: 'nexdo-tasks' }
-  )
+
+      getDeletedRootTasks: () => {
+        const state = get();
+        return state.rootTaskIds.map((id) => state.tasks[id]).filter((t) => !!t?.deletedAt);
+      },
+    };
+  })
 );
+
+if (typeof window !== 'undefined') {
+  useTaskStore.subscribe((state) => {
+    taskRepository.save({ tasks: state.tasks, rootTaskIds: state.rootTaskIds });
+  });
+}

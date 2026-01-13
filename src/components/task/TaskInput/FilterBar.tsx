@@ -1,33 +1,40 @@
-import { useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { Filter, ArrowUpDown, Check, X, ChevronDown } from 'lucide-react';
 import { AvatarStack } from '../../ui';
 import { cn } from '../../../lib/cn';
-
-interface FilterOption {
-  id: string;
-  label: string;
-  checked: boolean;
-}
+import { useProjectStore, useUIStore, useUserStore } from '../../../store';
+import { DEFAULT_STATUSES, PRIORITY_CONFIG, type Priority, type Status } from '../../../types';
+import type { TaskSort } from '../../../lib/taskQuery';
 
 interface SortOption {
-  id: string;
+  id: TaskSort;
   label: string;
 }
 
-export function FilterBar() {
+export function FilterBar({ projectId }: { projectId?: string }) {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
-  const [filters, setFilters] = useState<FilterOption[]>([
-    { id: 'status-todo', label: 'Todo', checked: false },
-    { id: 'status-in-progress', label: 'In Progress', checked: false },
-    { id: 'status-done', label: 'Done', checked: false },
-    { id: 'priority-high', label: 'High Priority', checked: false },
-    { id: 'priority-urgent', label: 'Urgent', checked: false },
-    { id: 'assigned-me', label: 'Assigned to me', checked: false },
-  ]);
-  const [currentSort, setCurrentSort] = useState<string>('due-date');
+  const taskStatusFilters = useUIStore((s) => s.taskStatusFilters);
+  const taskPriorityFilters = useUIStore((s) => s.taskPriorityFilters);
+  const taskAssigneeFilter = useUIStore((s) => s.taskAssigneeFilter);
+  const taskSort = useUIStore((s) => s.taskSort);
+  const setTaskSort = useUIStore((s) => s.setTaskSort);
+  const toggleTaskStatusFilter = useUIStore((s) => s.toggleTaskStatusFilter);
+  const toggleTaskPriorityFilter = useUIStore((s) => s.toggleTaskPriorityFilter);
+  const setTaskAssigneeFilter = useUIStore((s) => s.setTaskAssigneeFilter);
+  const clearTaskFilters = useUIStore((s) => s.clearTaskFilters);
+  const currentUserId = useUserStore((s) => s.currentUserId);
+  const projectStatuses = useProjectStore((s) =>
+    projectId ? s.projects[projectId]?.statuses : null
+  );
+  const statuses: Status[] = projectStatuses ?? DEFAULT_STATUSES;
+  const orderedStatuses = useMemo(
+    () => [...statuses].sort((a, b) => a.order - b.order),
+    [statuses]
+  );
 
   const sortOptions: SortOption[] = [
+    { id: 'manual', label: 'Manual' },
     { id: 'due-date', label: 'Due Date' },
     { id: 'priority', label: 'Priority' },
     { id: 'created', label: 'Created Date' },
@@ -38,7 +45,10 @@ export function FilterBar() {
   const filterRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
 
-  const activeFilterCount = filters.filter(f => f.checked).length;
+  const activeFilterCount =
+    taskStatusFilters.length +
+    taskPriorityFilters.length +
+    (taskAssigneeFilter ? 1 : 0);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -53,15 +63,7 @@ export function FilterBar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const toggleFilter = (id: string) => {
-    setFilters(prev => prev.map(f =>
-      f.id === id ? { ...f, checked: !f.checked } : f
-    ));
-  };
-
-  const clearFilters = () => {
-    setFilters(prev => prev.map(f => ({ ...f, checked: false })));
-  };
+  const isAssignedToMe = taskAssigneeFilter === currentUserId;
 
   const viewers = [
     { name: 'User A' },
@@ -105,7 +107,7 @@ export function FilterBar() {
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Filter by</span>
               {activeFilterCount > 0 && (
                 <button
-                  onClick={clearFilters}
+                  onClick={clearTaskFilters}
                   className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 transition-colors"
                 >
                   <X className="w-3 h-3" />
@@ -115,55 +117,59 @@ export function FilterBar() {
             </div>
             <div className="py-1">
               <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Status</div>
-              {filters.slice(0, 3).map(filter => (
+              {orderedStatuses.map((status) => {
+                const checked = taskStatusFilters.includes(status.id);
+                return (
                 <button
-                  key={filter.id}
-                  onClick={() => toggleFilter(filter.id)}
+                  key={status.id}
+                  onClick={() => toggleTaskStatusFilter(status.id)}
                   className="w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50 flex items-center justify-between transition-colors"
                 >
                   <span className={cn(
                     'transition-colors',
-                    filter.checked ? 'text-indigo-600 font-medium' : 'text-slate-600'
+                    checked ? 'text-indigo-600 font-medium' : 'text-slate-600'
                   )}>
-                    {filter.label}
+                    {status.name}
                   </span>
-                  {filter.checked && <Check className="w-4 h-4 text-indigo-600" />}
+                  {checked && <Check className="w-4 h-4 text-indigo-600" />}
                 </button>
-              ))}
+                );
+              })}
               <div className="my-1 border-t border-slate-100" />
               <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Priority</div>
-              {filters.slice(3, 5).map(filter => (
-                <button
-                  key={filter.id}
-                  onClick={() => toggleFilter(filter.id)}
+              {(['urgent', 'high'] as Priority[]).map((p) => {
+                const checked = taskPriorityFilters.includes(p);
+                const cfg = PRIORITY_CONFIG[p];
+                return (
+                  <button
+                  key={p}
+                  onClick={() => toggleTaskPriorityFilter(p)}
                   className="w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50 flex items-center justify-between transition-colors"
                 >
                   <span className={cn(
                     'transition-colors',
-                    filter.checked ? 'text-indigo-600 font-medium' : 'text-slate-600'
+                    checked ? 'text-indigo-600 font-medium' : 'text-slate-600'
                   )}>
-                    {filter.label}
+                    {cfg.label}
                   </span>
-                  {filter.checked && <Check className="w-4 h-4 text-indigo-600" />}
+                  {checked && <Check className="w-4 h-4 text-indigo-600" />}
                 </button>
-              ))}
+                );
+              })}
               <div className="my-1 border-t border-slate-100" />
               <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Assignee</div>
-              {filters.slice(5).map(filter => (
-                <button
-                  key={filter.id}
-                  onClick={() => toggleFilter(filter.id)}
+              <button
+                  onClick={() => setTaskAssigneeFilter(isAssignedToMe ? null : currentUserId)}
                   className="w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50 flex items-center justify-between transition-colors"
                 >
                   <span className={cn(
                     'transition-colors',
-                    filter.checked ? 'text-indigo-600 font-medium' : 'text-slate-600'
+                    isAssignedToMe ? 'text-indigo-600 font-medium' : 'text-slate-600'
                   )}>
-                    {filter.label}
+                    Assigned to me
                   </span>
-                  {filter.checked && <Check className="w-4 h-4 text-indigo-600" />}
+                  {isAssignedToMe && <Check className="w-4 h-4 text-indigo-600" />}
                 </button>
-              ))}
             </div>
           </div>
         )}
@@ -184,7 +190,7 @@ export function FilterBar() {
           <ArrowUpDown className="w-3.5 h-3.5" />
           Sort
           <span className="text-slate-400 font-normal">
-            : {sortOptions.find(s => s.id === currentSort)?.label}
+            : {sortOptions.find(s => s.id === taskSort)?.label}
           </span>
           <ChevronDown className={cn(
             'w-3 h-3 transition-transform',
@@ -202,18 +208,18 @@ export function FilterBar() {
                 <button
                   key={option.id}
                   onClick={() => {
-                    setCurrentSort(option.id);
+                    setTaskSort(option.id);
                     setShowSortMenu(false);
                   }}
                   className="w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50 flex items-center justify-between transition-colors"
                 >
                   <span className={cn(
                     'transition-colors',
-                    currentSort === option.id ? 'text-indigo-600 font-medium' : 'text-slate-600'
+                    taskSort === option.id ? 'text-indigo-600 font-medium' : 'text-slate-600'
                   )}>
                     {option.label}
                   </span>
-                  {currentSort === option.id && <Check className="w-4 h-4 text-indigo-600" />}
+                  {taskSort === option.id && <Check className="w-4 h-4 text-indigo-600" />}
                 </button>
               ))}
             </div>
@@ -222,6 +228,17 @@ export function FilterBar() {
       </div>
 
       <div className="h-4 w-px bg-slate-200" />
+
+      {taskSort === 'manual' && (
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <span className="px-2 py-1 rounded-md bg-slate-50 border border-slate-200 text-slate-600 font-medium">
+            드래그: 순서 변경
+          </span>
+          <span className="px-2 py-1 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 font-medium">
+            Shift + Drop: 하위로 이동
+          </span>
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <AvatarStack avatars={viewers} max={3} size="sm" />

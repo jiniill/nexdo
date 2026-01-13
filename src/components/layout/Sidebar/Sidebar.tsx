@@ -1,4 +1,4 @@
-import { Inbox, Calendar, Zap, User, Clock } from 'lucide-react';
+import { Inbox, Calendar, Zap, User, Clock, Trash2 } from 'lucide-react';
 import { cn } from '../../../lib/cn';
 import { useUIStore, useTaskStore } from '../../../store';
 import { SidebarHeader } from './SidebarHeader';
@@ -12,6 +12,7 @@ export function Sidebar() {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const inboxCount = useTaskStore((s) => s.getInboxTasks().length);
   const todayCount = useTaskStore((s) => s.getTodayTasks().length);
+  const trashCount = useTaskStore((s) => s.getDeletedRootTasks().length);
 
   if (collapsed) {
     return null;
@@ -52,6 +53,7 @@ export function Sidebar() {
         <NavSection title="Filters">
           <NavLink to="/assigned" icon={User} label="Assigned to me" />
           <NavLink to="/overdue" icon={Clock} label="Overdue" />
+          <NavLink to="/trash" icon={Trash2} label="Trash" badge={trashCount || undefined} />
         </NavSection>
       </div>
 

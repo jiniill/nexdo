@@ -1,11 +1,28 @@
-import { useTaskStore } from '../store';
+import { useMemo } from 'react';
+import { useTaskStore, useUIStore } from '../store';
 import { Header } from '../components/layout/Header';
 import { FilterBar } from '../components/task/TaskInput';
 import { TaskList } from '../components/task/TaskList';
 import { FloatingInput } from '../components/task/TaskInput';
+import { applyTaskQuery } from '../lib/taskQuery';
 
 export default function Today() {
   const tasks = useTaskStore((s) => s.getTodayTasks());
+  const taskStatusFilters = useUIStore((s) => s.taskStatusFilters);
+  const taskPriorityFilters = useUIStore((s) => s.taskPriorityFilters);
+  const taskAssigneeFilter = useUIStore((s) => s.taskAssigneeFilter);
+  const taskSort = useUIStore((s) => s.taskSort);
+
+  const visibleTasks = useMemo(
+    () =>
+      applyTaskQuery(tasks, {
+        statusIds: taskStatusFilters,
+        priorities: taskPriorityFilters,
+        assigneeId: taskAssigneeFilter,
+        sort: taskSort,
+      }),
+    [taskAssigneeFilter, taskPriorityFilters, taskSort, taskStatusFilters, tasks]
+  );
 
   return (
     <>
@@ -15,7 +32,7 @@ export default function Today() {
       />
       <FilterBar />
       <div className="flex-1 relative overflow-hidden">
-        <TaskList tasks={tasks} groupBy="none" />
+        <TaskList tasks={visibleTasks} groupBy="none" />
         <FloatingInput />
       </div>
     </>

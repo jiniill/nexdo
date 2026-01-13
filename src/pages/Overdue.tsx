@@ -1,16 +1,22 @@
 import { useMemo } from 'react';
-import { useParams } from 'react-router-dom';
-import { useTaskStore, useProjectStore, useUIStore } from '../store';
+import { isPast, parseISO } from 'date-fns';
+import { useTaskStore, useUIStore } from '../store';
 import { Header } from '../components/layout/Header';
 import { FilterBar } from '../components/task/TaskInput';
 import { TaskList } from '../components/task/TaskList';
 import { FloatingInput } from '../components/task/TaskInput';
 import { applyTaskQuery } from '../lib/taskQuery';
 
-export default function Project() {
-  const { projectId } = useParams<{ projectId: string }>();
-  const project = useProjectStore((s) => (projectId ? s.projects[projectId] : null));
-  const tasks = useTaskStore((s) => (projectId ? s.getTasksByProject(projectId) : []));
+export default function Overdue() {
+  const tasks = useTaskStore((s) =>
+    Object.values(s.tasks).filter((t) => {
+      if (t.deletedAt) return false;
+      if (t.parentId) return false;
+      if (!t.dueDate) return false;
+      if (t.statusId === 'done') return false;
+      return isPast(parseISO(t.dueDate));
+    })
+  );
   const taskStatusFilters = useUIStore((s) => s.taskStatusFilters);
   const taskPriorityFilters = useUIStore((s) => s.taskPriorityFilters);
   const taskAssigneeFilter = useUIStore((s) => s.taskAssigneeFilter);
@@ -27,28 +33,16 @@ export default function Project() {
     [taskAssigneeFilter, taskPriorityFilters, taskSort, taskStatusFilters, tasks]
   );
 
-  if (!project) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-slate-400">Project not found</p>
-      </div>
-    );
-  }
-
   return (
     <>
       <Header
-        breadcrumbs={[
-          { label: 'Projects', to: '/' },
-          { label: project.name },
-        ]}
-        status="IN PROGRESS"
-        showViewSwitcher={true}
+        breadcrumbs={[{ label: 'Overdue' }]}
+        showViewSwitcher={false}
       />
-      <FilterBar projectId={projectId} />
+      <FilterBar />
       <div className="flex-1 relative overflow-hidden">
         <TaskList tasks={visibleTasks} groupBy="dueDate" />
-        <FloatingInput projectId={projectId} />
+        <FloatingInput />
       </div>
     </>
   );

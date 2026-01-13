@@ -11,6 +11,8 @@ export function TaskDetails() {
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(task?.title || '');
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [description, setDescription] = useState(task?.description || '');
 
   if (!task) return null;
 
@@ -19,6 +21,16 @@ export function TaskDetails() {
       updateTask(task.id, { title: title.trim() });
     }
     setIsEditingTitle(false);
+  };
+
+  const handleDescriptionSave = () => {
+    const trimmed = description.trim();
+    const next = trimmed.length > 0 ? trimmed : undefined;
+
+    if (next !== task.description) {
+      updateTask(task.id, { description: next });
+    }
+    setIsEditingDescription(false);
   };
 
   return (
@@ -58,11 +70,41 @@ export function TaskDetails() {
       )}
 
       {/* Description */}
-      <p className="text-sm text-slate-600">
-        {task.description || (
-          <span className="text-slate-400 italic">Add a description...</span>
-        )}
-      </p>
+      {isEditingDescription ? (
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          onBlur={handleDescriptionSave}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setDescription(task.description || '');
+              setIsEditingDescription(false);
+            }
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              handleDescriptionSave();
+            }
+          }}
+          placeholder="Add a description..."
+          rows={3}
+          className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 resize-none placeholder:text-slate-400"
+          autoFocus
+        />
+      ) : (
+        <p
+          onClick={() => {
+            setDescription(task.description || '');
+            setIsEditingDescription(true);
+          }}
+          className="text-sm text-slate-600 cursor-text hover:bg-slate-50 rounded px-1 -mx-1 whitespace-pre-wrap"
+        >
+          {task.description ? (
+            task.description
+          ) : (
+            <span className="text-slate-400 italic">Add a description...</span>
+          )}
+        </p>
+      )}
     </div>
   );
 }

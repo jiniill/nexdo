@@ -1,55 +1,24 @@
 import { useState } from 'react';
 import { Send } from 'lucide-react';
 import { Avatar } from '../../ui';
-import { useUIStore, useTaskStore } from '../../../store';
+import { useActivityStore, useProjectStore, useUIStore, useTaskStore, useUserStore } from '../../../store';
 import { format, parseISO } from 'date-fns';
 import { cn } from '../../../lib/cn';
-
-interface Activity {
-  id: string;
-  type: 'status' | 'comment';
-  user: { name: string };
-  action?: string;
-  value?: string;
-  valueColor?: string;
-  content?: string;
-  timestamp: string;
-}
+import { DEFAULT_STATUSES } from '../../../types';
 
 export function ActivityFeed() {
   const selectedTaskId = useUIStore((s) => s.selectedTaskId);
   const task = useTaskStore((s) => (selectedTaskId ? s.tasks[selectedTaskId] : null));
-  const [activities, setActivities] = useState<Activity[]>([
-    {
-      id: '1',
-      type: 'status',
-      user: { name: 'Kim' },
-      action: 'changed status to',
-      value: 'In Progress',
-      valueColor: 'text-amber-600',
-      timestamp: '2025-01-12T00:00:00.000Z',
-    },
-    {
-      id: '2',
-      type: 'comment',
-      user: { name: 'Park' },
-      content: '@Kim 현재 DB 커넥션 풀 설정 확인해봤는데, max connection을 좀 더 늘려야 할 것 같아.',
-      timestamp: '2025-01-11T23:00:00.000Z',
-    },
-  ]);
-
-  const addComment = (content: string) => {
-    const newComment: Activity = {
-      id: Date.now().toString(),
-      type: 'comment',
-      user: { name: '김개발' },
-      content,
-      timestamp: new Date().toISOString(),
-    };
-    setActivities(prev => [newComment, ...prev]);
-  };
+  const project = useProjectStore((s) => (task?.projectId ? s.projects[task.projectId] : null));
+  const currentUserId = useUserStore((s) => s.currentUserId);
+  const getUserById = useUserStore((s) => s.getUserById);
+  const activities = useActivityStore((s) => (selectedTaskId ? s.getTaskActivities(selectedTaskId) : []));
+  const addComment = useActivityStore((s) => s.addComment);
 
   if (!task) return null;
+
+  const statuses = project?.statuses ?? DEFAULT_STATUSES;
+  const getStatusName = (statusId: string) => statuses.find((s) => s.id === statusId)?.name ?? statusId;
 
   return (
     <div>
@@ -57,46 +26,70 @@ export function ActivityFeed() {
         Activity
       </h3>
 
-      <div className="space-y-4">
-        {activities.map((activity) => (
-          <div key={activity.id} className="flex gap-3">
-            <Avatar name={activity.user.name} size="sm" className="mt-0.5" />
-            <div className="flex-1 min-w-0">
-              {activity.type === 'status' ? (
-                <>
-                  <div className="text-sm">
-                    <span className="font-medium text-slate-900">
-                      {activity.user.name}
-                    </span>{' '}
-                    <span className="text-slate-500">{activity.action}</span>{' '}
-                    <span className={`font-medium ${activity.valueColor}`}>
-                      {activity.value}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    {format(parseISO(activity.timestamp), 'MMM d, h:mm a')}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-sm font-medium text-slate-900">
-                    {activity.user.name}
-                  </div>
-                  <div className="text-sm text-slate-600 bg-slate-50 p-2 rounded-lg mt-1 border border-slate-100">
-                    {activity.content}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-1 flex gap-2">
-                    <span>{format(parseISO(activity.timestamp), 'MMM d, h:mm a')}</span>
-                    <button className="hover:text-slate-600 transition-colors">Reply</button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+      {activities.length === 0 ? (
+        <div className="text-sm text-slate-400 bg-slate-50 border border-slate-100 rounded-lg p-3">
+          아직 활동이 없습니다.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {activities.map((activity) => {
+            const user = getUserById(activity.actorUserId);
+            const actorName = user?.name ?? activity.actorUserId;
 
-      <CommentInput onSubmit={addComment} />
+            return (
+              <div key={activity.id} className="flex gap-3">
+                <Avatar name={actorName} size="sm" className="mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  {activity.type === 'comment' ? (
+                    <>
+                      <div className="text-sm font-medium text-slate-900">
+                        {actorName}
+                      </div>
+                      <div className="text-sm text-slate-600 bg-slate-50 p-2 rounded-lg mt-1 border border-slate-100 whitespace-pre-wrap">
+                        {activity.content}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1 flex gap-2">
+                        <span>{format(parseISO(activity.createdAt), 'MMM d, h:mm a')}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-sm">
+                        <span className="font-medium text-slate-900">{actorName}</span>{' '}
+                        <span className="text-slate-500">
+                          {activity.type === 'created' && 'created this task'}
+                          {activity.type === 'completed' && 'completed this task'}
+                          {activity.type === 'reopened' && 'reopened this task'}
+                          {activity.type === 'status_change' && 'changed status'}
+                          {activity.type === 'updated' && 'updated task'}
+                        </span>
+                        {activity.type === 'status_change' && activity.toStatusId && (
+                          <span className="text-slate-900 font-medium"> → {getStatusName(activity.toStatusId)}</span>
+                        )}
+                      </div>
+                      {activity.type === 'updated' && activity.content && (
+                        <div className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-lg p-2 mt-1 whitespace-pre-wrap">
+                          {activity.content}
+                        </div>
+                      )}
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {format(parseISO(activity.createdAt), 'MMM d, h:mm a')}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <CommentInput
+        onSubmit={(content) => {
+          if (!selectedTaskId) return;
+          addComment(selectedTaskId, currentUserId, content);
+        }}
+      />
     </div>
   );
 }

@@ -9,9 +9,11 @@ export function QuickCapture({ onAdd }: QuickCaptureProps) {
     if (onAdd) {
       onAdd();
     } else {
-      // Dispatch 'c' key event to open FloatingInput modal
-      const event = new KeyboardEvent('keydown', { key: 'c', bubbles: true });
-      document.dispatchEvent(event);
+      window.dispatchEvent(
+        new CustomEvent('nexdo:quick-capture', {
+          detail: { source: 'sidebar' },
+        })
+      );
     }
   };
 

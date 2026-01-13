@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTaskStore } from '../../../store';
 import type { Task } from '../../../types';
+import { DEFAULT_STATUSES } from '../../../types';
 import { TaskSection } from './TaskSection';
 import { isThisWeek, parseISO, isPast, isFuture } from 'date-fns';
 
@@ -67,7 +68,9 @@ export function TaskList({ tasks, groupBy = 'dueDate' }: TaskListProps) {
 
       return Object.entries(byStatus).map(([statusId, statusTasks]) => ({
         id: statusId,
-        title: statusId.charAt(0).toUpperCase() + statusId.slice(1).replace('-', ' '),
+        title:
+          DEFAULT_STATUSES.find((s) => s.id === statusId)?.name ??
+          statusId.charAt(0).toUpperCase() + statusId.slice(1).replace('-', ' '),
         tasks: statusTasks,
       }));
     }

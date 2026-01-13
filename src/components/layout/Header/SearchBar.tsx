@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Search, X, FileText, Hash, User, Clock, ArrowRight } from 'lucide-react';
 import { cn } from '../../../lib/cn';
+import { useNavigate } from 'react-router-dom';
+import { useProjectStore, useTaskStore, useUIStore, useUserStore } from '../../../store';
 
 interface SearchResult {
   id: string;
@@ -10,26 +12,50 @@ interface SearchResult {
 }
 
 export function SearchBar() {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  const recentSearches: SearchResult[] = [
-    { id: 'r1', type: 'recent', title: '대시보드 차트', subtitle: '최근 검색' },
-    { id: 'r2', type: 'recent', title: '인증 흐름', subtitle: '최근 검색' },
-  ];
+  const allTasks = useTaskStore((s) => s.tasks);
+  const projects = useProjectStore((s) => s.getAllProjects());
+  const users = useUserStore((s) => s.getAllUsers());
+  const openInspector = useUIStore((s) => s.openInspector);
+  const setTaskAssigneeFilter = useUIStore((s) => s.setTaskAssigneeFilter);
 
-  const allResults: SearchResult[] = [
-    { id: '1', type: 'task' as const, title: '사용자 인증 흐름 기획', subtitle: 'Q1 제품 런칭' },
-    { id: '2', type: 'task' as const, title: '대시보드 차트 성능 최적화', subtitle: 'Q1 제품 런칭' },
-    { id: '3', type: 'project' as const, title: 'Q1 제품 런칭', subtitle: '프로젝트' },
-    { id: '4', type: 'person' as const, title: 'Kim', subtitle: '팀원' },
-  ];
-  const mockResults = query ? allResults.filter(r => r.title.toLowerCase().includes(query.toLowerCase())) : [];
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      return [
+        { id: 'recent:inbox', type: 'recent' as const, title: 'Inbox', subtitle: '이동' },
+        { id: 'recent:today', type: 'recent' as const, title: '오늘 할 일', subtitle: '이동' },
+      ];
+    }
 
-  const results = query ? mockResults : recentSearches;
+    const taskMatches: SearchResult[] = Object.values(allTasks)
+      .filter((t) => !t.deletedAt && (t.title + ' ' + (t.description ?? '')).toLowerCase().includes(q))
+      .slice(0, 6)
+      .map((t) => ({
+        id: t.id,
+        type: 'task' as const,
+        title: t.title,
+        subtitle: t.projectId ? projects.find((p) => p.id === t.projectId)?.name : 'Inbox',
+      }));
+
+    const projectMatches: SearchResult[] = projects
+      .filter((p) => p.name.toLowerCase().includes(q))
+      .slice(0, 4)
+      .map((p) => ({ id: p.id, type: 'project' as const, title: p.name, subtitle: '프로젝트' }));
+
+    const userMatches: SearchResult[] = users
+      .filter((u) => u.name.toLowerCase().includes(q))
+      .slice(0, 4)
+      .map((u) => ({ id: u.id, type: 'person' as const, title: u.name, subtitle: '팀원' }));
+
+    return [...taskMatches, ...projectMatches, ...userMatches];
+  }, [allTasks, projects, query, users]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -59,6 +85,22 @@ export function SearchBar() {
       e.preventDefault();
       setSelectedIndex(prev => Math.max(prev - 1, 0));
     } else if (e.key === 'Enter' && results[selectedIndex]) {
+      const selected = results[selectedIndex];
+      if (selected.type === 'task') {
+        openInspector(selected.id);
+      }
+      if (selected.type === 'project') {
+        navigate(`/project/${selected.id}`);
+      }
+      if (selected.type === 'person') {
+        setTaskAssigneeFilter(selected.id);
+        navigate('/');
+      }
+      if (selected.type === 'recent') {
+        if (selected.id === 'recent:inbox') navigate('/inbox');
+        if (selected.id === 'recent:today') navigate('/today');
+      }
+
       setIsOpen(false);
       setQuery('');
       setSelectedIndex(0);
@@ -105,29 +147,29 @@ export function SearchBar() {
             {/* Search Input */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200">
               <Search className="w-5 h-5 text-slate-400" />
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setSelectedIndex(0);
+                }}
+                onKeyDown={handleKeyNavigation}
+                placeholder="태스크, 프로젝트, 팀원 검색..."
+                className="flex-1 text-base bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-slate-400"
+              />
+              {query && (
+                <button
+                  onClick={() => {
+                    setQuery('');
                     setSelectedIndex(0);
                   }}
-                  onKeyDown={handleKeyNavigation}
-                  placeholder="태스크, 프로젝트, 팀원 검색..."
-                  className="flex-1 text-base bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-slate-400"
-                />
-                {query && (
-                  <button
-                    onClick={() => {
-                      setQuery('');
-                      setSelectedIndex(0);
-                    }}
-                    className="text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
               <kbd className="px-2 py-1 text-xs font-medium text-slate-400 bg-slate-100 rounded">
                 ESC
               </kbd>
@@ -151,6 +193,21 @@ export function SearchBar() {
                     <button
                       key={result.id}
                       onClick={() => {
+                        if (result.type === 'task') {
+                          openInspector(result.id);
+                        }
+                        if (result.type === 'project') {
+                          navigate(`/project/${result.id}`);
+                        }
+                        if (result.type === 'person') {
+                          setTaskAssigneeFilter(result.id);
+                          navigate('/');
+                        }
+                        if (result.type === 'recent') {
+                          if (result.id === 'recent:inbox') navigate('/inbox');
+                          if (result.id === 'recent:today') navigate('/today');
+                        }
+
                         setIsOpen(false);
                         setQuery('');
                         setSelectedIndex(0);

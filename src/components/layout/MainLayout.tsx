@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { useUIStore } from '../../store';
 import { Inspector } from './Inspector';
+import { AppContextMenu } from './AppContextMenu';
 
 export function MainLayout() {
   const inspectorOpen = useUIStore((s) => s.inspectorOpen);
@@ -18,6 +19,8 @@ export function MainLayout() {
 
       {/* Right Inspector */}
       {inspectorOpen && <Inspector />}
+
+      <AppContextMenu />
     </div>
   );
 }

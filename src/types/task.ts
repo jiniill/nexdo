@@ -23,6 +23,7 @@ export interface Task {
   // 시간
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
   dueDate?: string;
   completedAt?: string;
 

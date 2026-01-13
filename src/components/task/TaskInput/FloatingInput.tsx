@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Plus, ArrowUp, Flag, User, Hash, ChevronDown, AlertCircle } from 'lucide-react';
-import { useTaskStore } from '../../../store';
+import { useProjectStore, useTaskStore, useUserStore } from '../../../store';
 import { cn } from '../../../lib/cn';
+import { useAttentionPulse } from '../../../lib/hooks/useAttentionPulse';
 
 interface FloatingInputProps {
   projectId?: string;
@@ -17,17 +18,14 @@ const priorityOptions: { value: Priority; label: string; color: string }[] = [
   { value: 'none', label: '없음', color: 'text-slate-400 bg-slate-50' },
 ];
 
-const projectOptions = [
-  { id: 'q1-launch', name: 'Q1 제품 런칭', color: 'bg-blue-500' },
-  { id: 'marketing', name: '마케팅 리브랜딩', color: 'bg-emerald-500' },
-  { id: 'design-system', name: '디자인 시스템 2.0', color: 'bg-purple-500' },
-];
-
-const assigneeOptions = [
-  { id: 'kim', name: 'Kim' },
-  { id: 'park', name: 'Park' },
-  { id: 'lee', name: 'Lee' },
-];
+const projectColorDots: Record<string, string> = {
+  blue: 'bg-blue-500',
+  emerald: 'bg-emerald-500',
+  purple: 'bg-purple-500',
+  red: 'bg-red-500',
+  amber: 'bg-amber-500',
+  pink: 'bg-pink-500',
+};
 
 export function FloatingInput({ projectId }: FloatingInputProps) {
   const [value, setValue] = useState('');
@@ -44,7 +42,10 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
   const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const { isPulsing: isAttentionPulse, trigger: triggerAttentionPulse } = useAttentionPulse(700);
   const addTask = useTaskStore((s) => s.addTask);
+  const projects = useProjectStore((s) => s.getAllProjects());
+  const users = useUserStore((s) => s.getAllUsers());
 
   const handleOpen = useCallback(() => {
     setIsExpandedContentMounted(true);
@@ -71,6 +72,7 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
         priority,
         dueDate: dueDate || undefined,
         description: description || undefined,
+        assigneeIds: selectedAssignee ? [selectedAssignee] : [],
       });
       handleClose();
     }
@@ -104,19 +106,29 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
   }, [handleClose, handleOpen, isExpanded]);
 
   useEffect(() => {
+    const handleQuickCapture = () => {
+      handleOpen();
+      triggerAttentionPulse();
+    };
+
+    window.addEventListener('nexdo:quick-capture', handleQuickCapture);
+    return () => window.removeEventListener('nexdo:quick-capture', handleQuickCapture);
+  }, [handleOpen, triggerAttentionPulse]);
+
+  useEffect(() => {
     if (isExpanded) return;
     if (!isExpandedContentMounted) return;
 
     const timeoutId = window.setTimeout(() => {
       setIsExpandedContentMounted(false);
-    }, 350);
+    }, 450);
 
     return () => window.clearTimeout(timeoutId);
   }, [isExpanded, isExpandedContentMounted]);
 
   const currentPriority = priorityOptions.find(p => p.value === priority);
-  const currentProject = projectOptions.find(p => p.id === selectedProject);
-  const currentAssignee = assigneeOptions.find(a => a.id === selectedAssignee);
+  const currentProject = projects.find(p => p.id === selectedProject);
+  const currentAssignee = users.find(a => a.id === selectedAssignee);
   const isPanelExpandedUI = isExpanded || isExpandedContentMounted;
 
   return (
@@ -134,12 +146,13 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
 
       {/* Expanding Input Panel */}
       <div className="absolute bottom-6 left-6 right-6 lg:left-20 lg:right-20 z-50">
-        <div
-          className={cn(
-            'bg-white rounded-xl shadow-2xl border border-slate-200 ring-1 ring-slate-900/5 overflow-hidden flex flex-col transition-[height] duration-350 ease-in-out',
-            isExpanded ? 'h-[min(420px,60vh)]' : 'h-[72px]'
-          )}
-        >
+        <div className={cn('rounded-xl', isAttentionPulse && 'nexdo-attention-pulse')}>
+          <div
+            className={cn(
+              'bg-white rounded-xl shadow-2xl border border-slate-200 ring-1 ring-slate-900/5 overflow-hidden flex flex-col transition-[height] duration-[450ms] ease-[cubic-bezier(0.22,1,0.36,1)]',
+              isExpanded ? 'h-[min(420px,60vh)]' : 'h-[52px]'
+            )}
+          >
           {/* Title Row */}
           <div
             className={cn(
@@ -148,16 +161,16 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
             )}
           >
             <button
-              onClick={() => (isPanelExpandedUI ? handleClose() : handleOpen())}
-              aria-label={isPanelExpandedUI ? '입력 닫기' : '새 태스크 추가'}
+              onClick={() => (isExpanded ? handleClose() : handleOpen())}
+              aria-label={isExpanded ? '입력 닫기' : '새 태스크 추가'}
               className={cn(
                 'p-2 rounded-lg transition-colors',
-                isPanelExpandedUI
+                isExpanded
                   ? 'bg-primary-50 text-primary-600 hover:bg-primary-100'
                   : 'bg-slate-100 text-slate-500 hover:bg-primary-100 hover:text-primary-600'
               )}
             >
-              <Plus className={cn('w-5 h-5 transition-transform duration-300', isPanelExpandedUI && 'rotate-45')} />
+              <Plus className={cn('w-5 h-5 transition-transform duration-300', isExpanded && 'rotate-45')} />
             </button>
 
             <input
@@ -167,15 +180,15 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleTitleKeyDown}
               onFocus={handleOpen}
-              placeholder={isPanelExpandedUI ? '태스크 제목' : '새로운 태스크 입력... (예: 내일 오후 3시 디자인 리뷰 #업무 !높음)'}
+              placeholder={isExpanded ? '태스크 제목' : '새로운 태스크 입력... (예: 내일 오후 3시 디자인 리뷰 #업무 !높음)'}
               className={cn(
                 'flex-1 bg-transparent border-none focus:ring-0 focus:outline-none font-medium placeholder:text-slate-400',
-                isPanelExpandedUI ? 'text-lg py-2' : 'text-sm py-2'
+                isExpanded ? 'text-lg py-2' : 'text-sm py-2'
               )}
             />
 
             <div className="flex items-center gap-1 text-slate-400 pr-2">
-              {!isPanelExpandedUI && (
+              {!isExpanded && (
                 <>
                   <span className="text-[10px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
                     #Project
@@ -268,12 +281,12 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
                       }}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-slate-600 rounded-lg border border-slate-200 hover:border-slate-300 transition-all"
                     >
-                      {currentProject ? (
-                        <>
-                          <span className={cn('w-2 h-2 rounded-full', currentProject.color)} />
-                          {currentProject.name}
-                        </>
-                      ) : (
+                    {currentProject ? (
+                      <>
+                        <span className={cn('w-2 h-2 rounded-full', projectColorDots[currentProject.color] || 'bg-slate-400')} />
+                        {currentProject.name}
+                      </>
+                    ) : (
                         <>
                           <Hash className="w-3.5 h-3.5" />
                           프로젝트
@@ -292,25 +305,25 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
                         >
                           없음
                         </button>
-                        {projectOptions.map(proj => (
-                          <button
-                            key={proj.id}
-                            onClick={() => {
-                              setSelectedProject(proj.id);
-                              setShowProjectMenu(false);
-                            }}
-                            className={cn(
-                              'w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50 flex items-center gap-2',
-                              selectedProject === proj.id && 'bg-slate-50'
-                            )}
-                          >
-                            <span className={cn('w-2 h-2 rounded-full', proj.color)} />
-                            {proj.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                      {projects.map(proj => (
+                        <button
+                          key={proj.id}
+                          onClick={() => {
+                            setSelectedProject(proj.id);
+                            setShowProjectMenu(false);
+                          }}
+                          className={cn(
+                            'w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50 flex items-center gap-2',
+                            selectedProject === proj.id && 'bg-slate-50'
+                          )}
+                        >
+                          <span className={cn('w-2 h-2 rounded-full', projectColorDots[proj.color] || 'bg-slate-400')} />
+                          {proj.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                   {/* Assignee */}
                   <div className="relative">
@@ -337,24 +350,24 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
                         >
                           없음
                         </button>
-                        {assigneeOptions.map(user => (
-                          <button
-                            key={user.id}
-                            onClick={() => {
-                              setSelectedAssignee(user.id);
-                              setShowAssigneeMenu(false);
-                            }}
-                            className={cn(
-                              'w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50',
-                              selectedAssignee === user.id && 'bg-slate-50'
-                            )}
-                          >
-                            {user.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                      {users.map(user => (
+                        <button
+                          key={user.id}
+                          onClick={() => {
+                            setSelectedAssignee(user.id);
+                            setShowAssigneeMenu(false);
+                          }}
+                          className={cn(
+                            'w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50',
+                            selectedAssignee === user.id && 'bg-slate-50'
+                          )}
+                        >
+                          {user.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                   {/* Due Date */}
                   <div className="relative">
@@ -392,6 +405,7 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </>

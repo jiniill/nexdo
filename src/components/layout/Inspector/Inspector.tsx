@@ -15,17 +15,17 @@ export function Inspector() {
       <InspectorHeader />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-thin">
-        <TaskDetails />
+        <TaskDetails key={selectedTaskId} />
 
-        <PropertyGrid />
-
-        <hr className="border-slate-100" />
-
-        <SubtaskList />
+        <PropertyGrid key={selectedTaskId} />
 
         <hr className="border-slate-100" />
 
-        <ActivityFeed />
+        <SubtaskList key={selectedTaskId} />
+
+        <hr className="border-slate-100" />
+
+        <ActivityFeed key={selectedTaskId} />
       </div>
     </aside>
   );

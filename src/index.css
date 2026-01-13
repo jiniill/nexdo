@@ -24,6 +24,48 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+@keyframes nexdo-attention-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 rgb(var(--nexdo-attention-rgb) / 0),
+      0 0 0 0 rgb(var(--nexdo-attention-rgb) / 0);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.01);
+    box-shadow:
+      0 0 0 3px rgb(var(--nexdo-attention-rgb) / 0.28),
+      0 28px 90px -55px rgb(var(--nexdo-attention-rgb) / 0.65);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 rgb(var(--nexdo-attention-rgb) / 0),
+      0 0 0 0 rgb(var(--nexdo-attention-rgb) / 0);
+  }
+}
+
+@layer utilities {
+  .nexdo-attention-pulse {
+    --nexdo-attention-rgb: 79 70 229;
+    position: relative;
+    z-index: 0;
+  }
+
+  .nexdo-attention-pulse::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
+    animation: nexdo-attention-pulse 700ms cubic-bezier(0.22, 1, 0.36, 1) 1;
+  }
+}
+
 /* Custom Scrollbar */
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
