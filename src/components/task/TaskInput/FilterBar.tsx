@@ -1,10 +1,11 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
-import { Filter, ArrowUpDown, Check, X, ChevronDown } from 'lucide-react';
+import { Filter, ArrowUpDown, Check, X, ChevronDown, Columns3 } from 'lucide-react';
 import { AvatarStack } from '../../ui';
 import { cn } from '../../../lib/cn';
 import { useProjectStore, useUIStore, useUserStore } from '../../../store';
 import { DEFAULT_STATUSES, PRIORITY_CONFIG, type Priority, type Status } from '../../../types';
 import type { TaskSort } from '../../../lib/taskQuery';
+import { ProjectStatusModal } from './ProjectStatusModal';
 
 interface SortOption {
   id: TaskSort;
@@ -14,6 +15,7 @@ interface SortOption {
 export function FilterBar({ projectId }: { projectId?: string }) {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showStatuses, setShowStatuses] = useState(false);
   const taskStatusFilters = useUIStore((s) => s.taskStatusFilters);
   const taskPriorityFilters = useUIStore((s) => s.taskPriorityFilters);
   const taskAssigneeFilter = useUIStore((s) => s.taskAssigneeFilter);
@@ -229,6 +231,23 @@ export function FilterBar({ projectId }: { projectId?: string }) {
 
       <div className="h-4 w-px bg-slate-200" />
 
+      {projectId && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowStatuses(true)}
+            className={cn(
+              'flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded border transition-all',
+              'text-slate-600 hover:bg-slate-100 border-transparent hover:border-slate-200'
+            )}
+          >
+            <Columns3 className="w-3.5 h-3.5" />
+            Statuses
+          </button>
+          <div className="h-4 w-px bg-slate-200" />
+        </>
+      )}
+
       {taskSort === 'manual' && (
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <span className="px-2 py-1 rounded-md bg-slate-50 border border-slate-200 text-slate-600 font-medium">
@@ -244,6 +263,10 @@ export function FilterBar({ projectId }: { projectId?: string }) {
         <AvatarStack avatars={viewers} max={3} size="sm" />
         <span className="text-xs text-slate-400">{viewers.length} viewing</span>
       </div>
+
+      {projectId && showStatuses && (
+        <ProjectStatusModal projectId={projectId} onClose={() => setShowStatuses(false)} />
+      )}
     </div>
   );
 }

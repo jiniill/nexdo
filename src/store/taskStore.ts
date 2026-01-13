@@ -27,6 +27,7 @@ interface TaskState {
   deleteTask: (id: string) => void; // soft delete
   restoreTask: (id: string) => void;
   hardDeleteTask: (id: string) => void;
+  ensureProjectStatusIds: (projectId: string, validStatusIds: string[], fallbackStatusId: string) => void;
   toggleComplete: (id: string) => void;
   moveTask: (id: string, newParentId: string | null, index?: number) => void;
 
@@ -224,6 +225,22 @@ export const useTaskStore = create<TaskState>()(
           };
 
           deleteRecursive(id);
+        });
+      },
+
+      ensureProjectStatusIds: (projectId, validStatusIds, fallbackStatusId) => {
+        const valid = new Set(validStatusIds);
+        const now = new Date().toISOString();
+
+        set((state) => {
+          Object.values(state.tasks).forEach((task) => {
+            if (task.deletedAt) return;
+            if (task.projectId !== projectId) return;
+            if (!valid.has(task.statusId)) {
+              task.statusId = fallbackStatusId;
+              task.updatedAt = now;
+            }
+          });
         });
       },
 

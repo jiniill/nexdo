@@ -4,6 +4,7 @@ import { useTaskStore, useProjectStore, useUIStore } from '../store';
 import { Header } from '../components/layout/Header';
 import { FilterBar } from '../components/task/TaskInput';
 import { TaskList } from '../components/task/TaskList';
+import { TaskBoard } from '../components/task/TaskBoard';
 import { FloatingInput } from '../components/task/TaskInput';
 import { applyTaskQuery } from '../lib/taskQuery';
 
@@ -15,6 +16,7 @@ export default function Project() {
   const taskPriorityFilters = useUIStore((s) => s.taskPriorityFilters);
   const taskAssigneeFilter = useUIStore((s) => s.taskAssigneeFilter);
   const taskSort = useUIStore((s) => s.taskSort);
+  const viewMode = useUIStore((s) => s.viewMode);
 
   const visibleTasks = useMemo(
     () =>
@@ -47,7 +49,16 @@ export default function Project() {
       />
       <FilterBar projectId={projectId} />
       <div className="flex-1 relative overflow-hidden">
-        <TaskList tasks={visibleTasks} groupBy="dueDate" />
+        {viewMode === 'list' && <TaskList tasks={visibleTasks} groupBy="dueDate" />}
+        {viewMode === 'board' && <TaskBoard tasks={visibleTasks} statuses={project.statuses} />}
+        {viewMode === 'gantt' && (
+          <div className="flex-1 flex items-center justify-center text-slate-400">
+            <div className="text-center">
+              <p className="text-lg font-medium">Gantt view</p>
+              <p className="text-sm">Coming soon</p>
+            </div>
+          </div>
+        )}
         <FloatingInput projectId={projectId} />
       </div>
     </>
