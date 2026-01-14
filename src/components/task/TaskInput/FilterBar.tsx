@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Filter, ArrowUpDown, Check, X, ChevronDown, Columns3 } from 'lucide-react';
 import { AvatarStack } from '../../ui';
 import { cn } from '../../../lib/cn';
@@ -6,6 +6,7 @@ import { useProjectStore, useUIStore, useUserStore } from '../../../store';
 import { DEFAULT_STATUSES, PRIORITY_CONFIG, type Priority, type Status } from '../../../types';
 import type { TaskSort } from '../../../lib/taskQuery';
 import { ProjectStatusModal } from './ProjectStatusModal';
+import { useClickOutside } from '../../../lib/hooks/useClickOutside';
 
 interface SortOption {
   id: TaskSort;
@@ -46,24 +47,19 @@ export function FilterBar({ projectId }: { projectId?: string }) {
 
   const filterRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
+  const menuRefs = useMemo(() => [filterRef, sortRef], []);
 
   const activeFilterCount =
     taskStatusFilters.length +
     taskPriorityFilters.length +
     (taskAssigneeFilter ? 1 : 0);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-        setShowFilterMenu(false);
-      }
-      if (sortRef.current && !sortRef.current.contains(event.target as Node)) {
-        setShowSortMenu(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+  const menusOpen = showFilterMenu || showSortMenu;
+  const closeMenus = useCallback(() => {
+    setShowFilterMenu(false);
+    setShowSortMenu(false);
   }, []);
+  useClickOutside({ refs: menuRefs, onOutside: closeMenus, enabled: menusOpen });
 
   const isAssignedToMe = taskAssigneeFilter === currentUserId;
 

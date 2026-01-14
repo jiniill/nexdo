@@ -1,7 +1,8 @@
 import { createWithEqualityFn as create } from 'zustand/traditional';
 import { immer } from 'zustand/middleware/immer';
 import { v4 as uuidv4 } from 'uuid';
-import type { Task, Priority } from '../types';
+import { addDays, addMonths, addWeeks, format, isValid, parseISO } from 'date-fns';
+import { DEFAULT_STATUSES, type RecurrenceRule, type Task, type Priority } from '../types';
 import { useActivityStore } from './activityStore';
 import { useUserStore } from './userStore';
 import { taskRepository } from '../data/repositories';
@@ -21,14 +22,19 @@ interface TaskState {
       description?: string;
       assigneeIds?: string[];
       labels?: string[];
+      recurrence?: RecurrenceRule;
     }
   ) => string;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void; // soft delete
   restoreTask: (id: string) => void;
   hardDeleteTask: (id: string) => void;
+  detachProject: (projectId: string) => void;
   ensureProjectStatusIds: (projectId: string, validStatusIds: string[], fallbackStatusId: string) => void;
   toggleComplete: (id: string) => void;
+  startTracking: (id: string) => void;
+  stopTracking: (id: string) => void;
+  toggleTracking: (id: string) => void;
   moveTask: (id: string, newParentId: string | null, index?: number) => void;
 
   // Selectors
@@ -60,6 +66,7 @@ export const useTaskStore = create<TaskState>()(
           description,
           assigneeIds = [],
           labels = [],
+          recurrence,
         } = options;
 
         set((state) => {
@@ -80,6 +87,7 @@ export const useTaskStore = create<TaskState>()(
             projectId,
             assigneeIds,
             labels,
+            recurrence,
           };
 
           state.tasks[id] = newTask;
@@ -159,6 +167,14 @@ export const useTaskStore = create<TaskState>()(
           }
         }
 
+        if (has('estimatedMinutes')) {
+          const prev = previous.estimatedMinutes;
+          const next = updates.estimatedMinutes;
+          if (prev !== next) {
+            changes.push(`estimate: ${prev ?? 'none'} → ${next ?? 'none'}`);
+          }
+        }
+
         if (changes.length > 0) {
           useActivityStore.getState().addActivity({
             taskId: id,
@@ -228,6 +244,23 @@ export const useTaskStore = create<TaskState>()(
         });
       },
 
+      detachProject: (projectId) => {
+        const validStatusIds = new Set(DEFAULT_STATUSES.map((s) => s.id));
+        const now = new Date().toISOString();
+
+        set((state) => {
+          Object.values(state.tasks).forEach((task) => {
+            if (task.projectId !== projectId) return;
+            task.projectId = undefined;
+            if (!validStatusIds.has(task.statusId)) {
+              task.statusId = 'todo';
+              task.completedAt = undefined;
+            }
+            task.updatedAt = now;
+          });
+        });
+      },
+
       ensureProjectStatusIds: (projectId, validStatusIds, fallbackStatusId) => {
         const valid = new Set(validStatusIds);
         const now = new Date().toISOString();
@@ -248,6 +281,8 @@ export const useTaskStore = create<TaskState>()(
         const task = get().tasks[id];
         if (!task) return;
         const wasDone = task.statusId === 'done';
+        const shouldSpawnNext = !wasDone && !!task.recurrence;
+        const wasTracking = !!task.trackingStartedAt;
 
         set((state) => {
           const draft = state.tasks[id];
@@ -256,16 +291,219 @@ export const useTaskStore = create<TaskState>()(
           const newStatus = wasDone ? 'todo' : 'done';
           const now = new Date().toISOString();
 
-          draft.statusId = newStatus;
-          draft.updatedAt = now;
-          draft.completedAt = wasDone ? undefined : now;
+          const markDoneRecursive = (taskId: string) => {
+            const t = state.tasks[taskId];
+            if (!t) return;
+            if (t.deletedAt) return;
+            const alreadyDone = t.statusId === 'done';
+            t.statusId = 'done';
+            t.updatedAt = now;
+            if (!alreadyDone) {
+              t.completedAt = now;
+            }
+
+            if (t.trackingStartedAt) {
+              const startedMs = Date.parse(t.trackingStartedAt);
+              if (Number.isFinite(startedMs)) {
+                const deltaSec = Math.max(0, Math.floor((Date.parse(now) - startedMs) / 1000));
+                t.trackedSeconds = (t.trackedSeconds ?? 0) + deltaSec;
+              }
+              t.trackingStartedAt = undefined;
+            }
+            t.childIds.forEach(markDoneRecursive);
+          };
+
+          const markTodo = (taskId: string) => {
+            const t = state.tasks[taskId];
+            if (!t) return;
+            if (t.deletedAt) return;
+            t.statusId = 'todo';
+            t.completedAt = undefined;
+            t.updatedAt = now;
+          };
+
+          if (newStatus === 'done') {
+            markDoneRecursive(id);
+
+            // If a task is done, and all visible siblings are done, auto-complete ancestors.
+            let parentId = state.tasks[id]?.parentId ?? null;
+            while (parentId) {
+              const parent = state.tasks[parentId];
+              if (!parent) break;
+              if (parent.deletedAt) break;
+
+              const visibleChildIds = parent.childIds.filter((cid) => {
+                const child = state.tasks[cid];
+                return !!child && !child.deletedAt;
+              });
+
+              if (visibleChildIds.length === 0) break;
+              const allDone = visibleChildIds.every((cid) => state.tasks[cid]?.statusId === 'done');
+              if (!allDone) break;
+
+              const parentAlreadyDone = parent.statusId === 'done';
+              parent.statusId = 'done';
+              parent.updatedAt = now;
+              if (!parentAlreadyDone) {
+                parent.completedAt = now;
+              }
+
+              parentId = parent.parentId ?? null;
+            }
+          } else {
+            markTodo(id);
+
+            // If a task is reopened, its ancestors can't be done.
+            let parentId = state.tasks[id]?.parentId ?? null;
+            while (parentId) {
+              const parent = state.tasks[parentId];
+              if (!parent) break;
+              if (parent.deletedAt) break;
+              if (parent.statusId === 'done') {
+                parent.statusId = 'todo';
+                parent.completedAt = undefined;
+                parent.updatedAt = now;
+              }
+              parentId = parent.parentId ?? null;
+            }
+          }
         });
+
+        if (shouldSpawnNext) {
+          const current = get().tasks[id];
+          if (current && current.recurrence) {
+            const nextDueDate = (() => {
+              const base = current.dueDate && isValid(parseISO(current.dueDate)) ? parseISO(current.dueDate) : new Date();
+              const interval = Math.max(1, current.recurrence.interval || 1);
+              const next =
+                current.recurrence.frequency === 'daily'
+                  ? addDays(base, interval)
+                  : current.recurrence.frequency === 'weekly'
+                    ? addWeeks(base, interval)
+                    : addMonths(base, interval);
+
+              const nextStr = format(next, 'yyyy-MM-dd');
+              const end = current.recurrence.endDate;
+              if (end && nextStr > end) return null;
+              return nextStr;
+            })();
+
+            if (nextDueDate) {
+              get().addTask(current.title, {
+                parentId: current.parentId ?? undefined,
+                projectId: current.projectId,
+                priority: current.priority,
+                dueDate: nextDueDate,
+                description: current.description,
+                assigneeIds: current.assigneeIds,
+                labels: current.labels,
+                recurrence: current.recurrence,
+              });
+            }
+          }
+        }
 
         useActivityStore.getState().addActivity({
           taskId: id,
           type: wasDone ? 'reopened' : 'completed',
           actorUserId: useUserStore.getState().currentUserId,
         });
+
+        if (!wasDone && wasTracking) {
+          useActivityStore.getState().addActivity({
+            taskId: id,
+            type: 'tracking_stopped',
+            actorUserId: useUserStore.getState().currentUserId,
+          });
+        }
+      },
+
+      startTracking: (id) => {
+        const nowIso = new Date().toISOString();
+        const nowMs = Date.now();
+        const actorUserId = useUserStore.getState().currentUserId;
+        const stoppedIds: string[] = [];
+        let didStart = false;
+
+        set((state) => {
+          const target = state.tasks[id];
+          if (!target) return;
+          if (target.deletedAt) return;
+          if (target.trackingStartedAt) return;
+
+          // Stop any other running timers to keep single-active tracking.
+          Object.values(state.tasks).forEach((t) => {
+            if (!t.trackingStartedAt) return;
+            if (t.deletedAt) {
+              t.trackingStartedAt = undefined;
+              return;
+            }
+            const startedMs = Date.parse(t.trackingStartedAt);
+            if (!Number.isFinite(startedMs)) {
+              t.trackingStartedAt = undefined;
+              t.updatedAt = nowIso;
+              return;
+            }
+            const deltaSec = Math.max(0, Math.floor((nowMs - startedMs) / 1000));
+            t.trackedSeconds = (t.trackedSeconds ?? 0) + deltaSec;
+            t.trackingStartedAt = undefined;
+            t.updatedAt = nowIso;
+            stoppedIds.push(t.id);
+          });
+
+          target.trackingStartedAt = nowIso;
+          target.trackedSeconds = target.trackedSeconds ?? 0;
+          target.updatedAt = nowIso;
+          didStart = true;
+        });
+
+        if (didStart) {
+          stoppedIds.forEach((taskId) => {
+            if (taskId === id) return;
+            useActivityStore.getState().addActivity({ taskId, type: 'tracking_stopped', actorUserId });
+          });
+          useActivityStore.getState().addActivity({ taskId: id, type: 'tracking_started', actorUserId });
+        }
+      },
+
+      stopTracking: (id) => {
+        const nowIso = new Date().toISOString();
+        const nowMs = Date.now();
+        const actorUserId = useUserStore.getState().currentUserId;
+        let didStop = false;
+
+        set((state) => {
+          const task = state.tasks[id];
+          if (!task) return;
+          if (!task.trackingStartedAt) return;
+
+          const startedMs = Date.parse(task.trackingStartedAt);
+          if (!Number.isFinite(startedMs)) {
+            task.trackingStartedAt = undefined;
+            task.updatedAt = nowIso;
+            return;
+          }
+
+          const deltaSec = Math.max(0, Math.floor((nowMs - startedMs) / 1000));
+          task.trackedSeconds = (task.trackedSeconds ?? 0) + deltaSec;
+          task.trackingStartedAt = undefined;
+          task.updatedAt = nowIso;
+          didStop = true;
+        });
+
+        if (didStop) {
+          useActivityStore.getState().addActivity({ taskId: id, type: 'tracking_stopped', actorUserId });
+        }
+      },
+
+      toggleTracking: (id) => {
+        const task = get().tasks[id];
+        if (!task) return;
+        if (task.trackingStartedAt) {
+          get().stopTracking(id);
+          return;
+        }
+        get().startTracking(id);
       },
 
       moveTask: (id, newParentId, index) => {

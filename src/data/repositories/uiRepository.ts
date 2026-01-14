@@ -2,7 +2,7 @@ import type { Priority } from '../../types';
 import type { TaskSort } from '../../lib/taskQuery';
 import { loadFromLocalStorage, saveToLocalStorage } from '../localStorage';
 
-export type ViewMode = 'list' | 'board' | 'gantt';
+export type ViewMode = 'list' | 'board' | 'calendar' | 'gantt';
 
 export interface UIRepoState {
   sidebarCollapsed: boolean;
@@ -34,4 +34,3 @@ export const uiRepository = {
     saveToLocalStorage(STORAGE_KEY, state, 1);
   },
 };
-

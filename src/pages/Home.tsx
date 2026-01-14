@@ -4,10 +4,13 @@ import { Header } from '../components/layout/Header';
 import { FilterBar } from '../components/task/TaskInput';
 import { TaskList } from '../components/task/TaskList';
 import { TaskBoard } from '../components/task/TaskBoard';
+import { TaskGantt } from '../components/task/TaskGantt';
+import { TaskCalendar } from '../components/task/TaskCalendar';
 import { FloatingInput } from '../components/task/TaskInput';
 import { applyTaskQuery } from '../lib/taskQuery';
 import { DEFAULT_STATUSES } from '../types';
 import { useMemo } from 'react';
+import { PageBody } from '../components/layout/PageBody';
 
 export default function Home() {
   const tasks = useTaskStore((s) => Object.values(s.tasks).filter((t) => !t.parentId && !t.deletedAt));
@@ -35,19 +38,13 @@ export default function Home() {
         showViewSwitcher={true}
       />
       <FilterBar />
-      <div className="flex-1 relative overflow-hidden">
+      <PageBody>
         {viewMode === 'list' && <TaskList tasks={visibleTasks} groupBy="dueDate" />}
         {viewMode === 'board' && <TaskBoard tasks={visibleTasks} statuses={DEFAULT_STATUSES} />}
-        {viewMode === 'gantt' && (
-          <div className="flex-1 flex items-center justify-center text-slate-400">
-            <div className="text-center">
-              <p className="text-lg font-medium">Gantt view</p>
-              <p className="text-sm">Coming soon</p>
-            </div>
-          </div>
-        )}
+        {viewMode === 'calendar' && <TaskCalendar tasks={visibleTasks} />}
+        {viewMode === 'gantt' && <TaskGantt tasks={visibleTasks} />}
         <FloatingInput />
-      </div>
+      </PageBody>
     </>
   );
 }

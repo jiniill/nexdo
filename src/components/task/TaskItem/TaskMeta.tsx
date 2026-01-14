@@ -1,7 +1,8 @@
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, Timer } from 'lucide-react';
 import { Avatar, StatusBadge } from '../../ui';
 import { cn } from '../../../lib/cn';
 import { format, isToday, isTomorrow, isPast, parseISO } from 'date-fns';
+import { formatDurationShort } from '../../../lib/time';
 
 interface TaskMetaProps {
   assignee?: { name: string; avatarUrl?: string };
@@ -9,6 +10,8 @@ interface TaskMetaProps {
   statusId: string;
   statusName: string;
   statusColor?: string;
+  trackedSeconds?: number;
+  isTracking?: boolean;
 }
 
 function formatDueDate(dateStr: string): { text: string; isOverdue: boolean } {
@@ -32,8 +35,11 @@ export function TaskMeta({
   statusId,
   statusName,
   statusColor,
+  trackedSeconds,
+  isTracking,
 }: TaskMetaProps) {
   const dueDateInfo = dueDate ? formatDueDate(dueDate) : null;
+  const shouldShowTracking = !!isTracking || (trackedSeconds !== undefined && trackedSeconds > 0);
 
   return (
     <div className="flex items-center gap-4 text-sm text-slate-500">
@@ -53,6 +59,21 @@ export function TaskMeta({
         >
           <CalendarClock className="w-3.5 h-3.5" />
           <span className="text-xs">{dueDateInfo.text}</span>
+        </div>
+      )}
+
+      {shouldShowTracking && (
+        <div
+          className={cn(
+            'flex items-center gap-1 font-medium',
+            isTracking ? 'text-green-600' : 'text-slate-500'
+          )}
+          title={isTracking ? 'Tracking' : 'Tracked time'}
+        >
+          <Timer className="w-3.5 h-3.5" />
+          <span className="text-xs">
+            {trackedSeconds !== undefined ? formatDurationShort(trackedSeconds) : 'Tracking'}
+          </span>
         </div>
       )}
 

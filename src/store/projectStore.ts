@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Project } from '../types';
 import { DEFAULT_STATUSES } from '../types';
 import { projectRepository } from '../data/repositories';
+import { useTaskStore } from './taskStore';
 
 interface ProjectState {
   projects: Record<string, Project>;
@@ -53,6 +54,7 @@ export const useProjectStore = create<ProjectState>()(
       },
 
       deleteProject: (id) => {
+        useTaskStore.getState().detachProject(id);
         set((state) => {
           delete state.projects[id];
         });

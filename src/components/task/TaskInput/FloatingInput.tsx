@@ -3,6 +3,8 @@ import { Plus, ArrowUp, Flag, User, Hash, ChevronDown, AlertCircle } from 'lucid
 import { useProjectStore, useTaskStore, useUserStore } from '../../../store';
 import { cn } from '../../../lib/cn';
 import { useAttentionPulse } from '../../../lib/hooks/useAttentionPulse';
+import { addDays, format } from 'date-fns';
+import type { RecurrenceRule } from '../../../types';
 
 interface FloatingInputProps {
   projectId?: string;
@@ -47,6 +49,171 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
   const projects = useProjectStore((s) => s.getAllProjects());
   const users = useUserStore((s) => s.getAllUsers());
 
+  const parseQuickCapture = useCallback(
+    (input: string) => {
+      const parts = input.trim().split(/\s+/).filter(Boolean);
+
+      let parsedProjectId: string | undefined;
+      let parsedAssigneeId: string | undefined;
+      let parsedPriority: Priority | undefined;
+      let parsedDueDate: string | undefined;
+      let parsedRecurrence: RecurrenceRule | undefined;
+      const parsedLabels: string[] = [];
+      const remaining: string[] = [];
+
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const tomorrowStr = format(addDays(new Date(), 1), 'yyyy-MM-dd');
+
+      const normalize = (s: string) => s.trim().toLowerCase();
+      const byProjectId = new Map(projects.map((p) => [normalize(p.id), p.id]));
+      const byProjectName = new Map(projects.map((p) => [normalize(p.name), p.id]));
+
+      const byUserId = new Map(users.map((u) => [normalize(u.id), u.id]));
+      const byUserName = new Map(users.map((u) => [normalize(u.name), u.id]));
+
+      const parsePriorityToken = (raw: string): Priority | null => {
+        const key = normalize(raw.replace(/^!+/, ''));
+        if (!key) return null;
+        if (['urgent', '긴급'].includes(key)) return 'urgent';
+        if (['high', 'p1', '높음'].includes(key)) return 'high';
+        if (['medium', 'p2', '보통'].includes(key)) return 'medium';
+        if (['low', 'p3', '낮음'].includes(key)) return 'low';
+        if (['none', '없음'].includes(key)) return 'none';
+        return null;
+      };
+
+      const parseRecurrenceToken = (raw: string): RecurrenceRule | null => {
+        const token = normalize(raw);
+
+        const simple: Record<string, RecurrenceRule['frequency']> = {
+          daily: 'daily',
+          everyday: 'daily',
+          '매일': 'daily',
+          weekly: 'weekly',
+          '매주': 'weekly',
+          monthly: 'monthly',
+          '매월': 'monthly',
+        };
+
+        if (simple[token]) return { frequency: simple[token], interval: 1 };
+
+        const prefixed = token.startsWith('repeat:') ? token.slice('repeat:'.length) : null;
+        if (prefixed) {
+          const match =
+            prefixed.match(/^(daily|weekly|monthly)$/) ||
+            prefixed.match(/^(\d+)(d|w|m)$/) ||
+            prefixed.match(/^(daily|weekly|monthly):(\d+)$/);
+
+          if (!match) return null;
+
+          if (match.length === 2) {
+            return { frequency: match[1] as RecurrenceRule['frequency'], interval: 1 };
+          }
+
+          if (match.length === 3) {
+            const interval = Number.parseInt(match[1], 10);
+            const unit = match[2];
+            if (!Number.isFinite(interval) || interval <= 0) return null;
+            const frequency: RecurrenceRule['frequency'] = unit === 'd' ? 'daily' : unit === 'w' ? 'weekly' : 'monthly';
+            return { frequency, interval };
+          }
+
+          if (match.length === 4) {
+            const frequency = match[1] as RecurrenceRule['frequency'];
+            const interval = Number.parseInt(match[2], 10);
+            if (!Number.isFinite(interval) || interval <= 0) return null;
+            return { frequency, interval };
+          }
+        }
+
+        const compact = token.match(/^every(\d+)?(d|w|m)$/);
+        if (compact) {
+          const interval = compact[1] ? Number.parseInt(compact[1], 10) : 1;
+          const unit = compact[2];
+          if (!Number.isFinite(interval) || interval <= 0) return null;
+          const frequency: RecurrenceRule['frequency'] = unit === 'd' ? 'daily' : unit === 'w' ? 'weekly' : 'monthly';
+          return { frequency, interval };
+        }
+
+        return null;
+      };
+
+      for (const part of parts) {
+        if (part.startsWith('#')) {
+          const raw = part.slice(1);
+          const key = normalize(raw);
+          const match = byProjectId.get(key) || byProjectName.get(key);
+          if (match && !parsedProjectId) {
+            parsedProjectId = match;
+            continue;
+          }
+          if (raw) parsedLabels.push(raw);
+          continue;
+        }
+
+        if (part.startsWith('@')) {
+          const raw = part.slice(1);
+          const key = normalize(raw);
+          const match = byUserId.get(key) || byUserName.get(key);
+          if (match && !parsedAssigneeId) {
+            parsedAssigneeId = match;
+            continue;
+          }
+          continue;
+        }
+
+        if (part.startsWith('!')) {
+          const p = parsePriorityToken(part);
+          if (p && !parsedPriority) {
+            parsedPriority = p;
+            continue;
+          }
+        }
+
+        if (!parsedRecurrence) {
+          const r = parseRecurrenceToken(part);
+          if (r) {
+            parsedRecurrence = r;
+            continue;
+          }
+        }
+
+        if (parsedRecurrence && /^until:\d{4}-\d{2}-\d{2}$/i.test(part) && !parsedRecurrence.endDate) {
+          parsedRecurrence = { ...parsedRecurrence, endDate: part.slice('until:'.length) };
+          continue;
+        }
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(part) && !parsedDueDate) {
+          parsedDueDate = part;
+          continue;
+        }
+
+        const word = normalize(part);
+        if (!parsedDueDate && (word === 'today' || word === '오늘')) {
+          parsedDueDate = todayStr;
+          continue;
+        }
+        if (!parsedDueDate && (word === 'tomorrow' || word === '내일')) {
+          parsedDueDate = tomorrowStr;
+          continue;
+        }
+
+        remaining.push(part);
+      }
+
+      return {
+        title: remaining.join(' ').trim(),
+        projectId: parsedProjectId,
+        assigneeId: parsedAssigneeId,
+        priority: parsedPriority,
+        dueDate: parsedDueDate,
+        recurrence: parsedRecurrence,
+        labels: parsedLabels,
+      };
+    },
+    [projects, users]
+  );
+
   const handleOpen = useCallback(() => {
     setIsExpandedContentMounted(true);
     setIsExpanded(true);
@@ -66,13 +233,18 @@ export function FloatingInput({ projectId }: FloatingInputProps) {
   }, [projectId]);
 
   const handleSubmit = () => {
-    if (value.trim()) {
-      addTask(value.trim(), {
-        projectId: selectedProject || undefined,
-        priority,
-        dueDate: dueDate || undefined,
+    const parsed = parseQuickCapture(value);
+    const title = parsed.title || value.trim();
+    if (title.trim()) {
+      const finalDueDate = parsed.dueDate ?? (dueDate.trim() ? dueDate : undefined);
+      addTask(title.trim(), {
+        projectId: parsed.projectId ?? (selectedProject ?? undefined),
+        priority: parsed.priority ?? priority,
+        dueDate: finalDueDate,
         description: description || undefined,
-        assigneeIds: selectedAssignee ? [selectedAssignee] : [],
+        assigneeIds: parsed.assigneeId ? [parsed.assigneeId] : selectedAssignee ? [selectedAssignee] : [],
+        recurrence: parsed.recurrence,
+        labels: parsed.labels,
       });
       handleClose();
     }

@@ -62,6 +62,8 @@ export function ActivityFeed() {
                           {activity.type === 'reopened' && 'reopened this task'}
                           {activity.type === 'status_change' && 'changed status'}
                           {activity.type === 'updated' && 'updated task'}
+                          {activity.type === 'tracking_started' && 'started tracking'}
+                          {activity.type === 'tracking_stopped' && 'stopped tracking'}
                         </span>
                         {activity.type === 'status_change' && activity.toStatusId && (
                           <span className="text-slate-900 font-medium"> → {getStatusName(activity.toStatusId)}</span>

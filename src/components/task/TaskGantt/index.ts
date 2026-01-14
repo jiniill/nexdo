@@ -1,0 +1,2 @@
+export { TaskGantt } from './TaskGantt';
+

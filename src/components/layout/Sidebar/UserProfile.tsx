@@ -1,22 +1,19 @@
-import { useState, useRef, useEffect } from 'react';
-import { Settings, LogOut, Moon, Sun, User, CreditCard, HelpCircle, ChevronRight } from 'lucide-react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Settings, LogOut, Moon, Sun, User, CreditCard, HelpCircle, ChevronRight, Database } from 'lucide-react';
 import { Avatar } from '../../ui';
 import { cn } from '../../../lib/cn';
+import { DataManagementModal } from './DataManagementModal';
+import { useClickOutside } from '../../../lib/hooks/useClickOutside';
 
 export function UserProfile() {
   const [isOpen, setIsOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [showDataModal, setShowDataModal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const refs = useMemo(() => [menuRef], []);
+  const closeMenu = useCallback(() => setIsOpen(false), []);
+  useClickOutside({ refs, onOutside: closeMenu, enabled: isOpen });
 
   return (
     <div className="p-3 border-t border-slate-200 relative" ref={menuRef}>
@@ -68,6 +65,17 @@ export function UserProfile() {
               환경설정
               <ChevronRight className="w-4 h-4 text-slate-400 ml-auto" />
             </button>
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                setShowDataModal(true);
+              }}
+              className="w-full px-3 py-2 text-sm text-left text-slate-600 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+            >
+              <Database className="w-4 h-4 text-slate-400" />
+              데이터 관리
+              <ChevronRight className="w-4 h-4 text-slate-400 ml-auto" />
+            </button>
           </div>
 
           <div className="border-t border-slate-100 py-1">
@@ -106,6 +114,8 @@ export function UserProfile() {
           </div>
         </div>
       )}
+
+      <DataManagementModal open={showDataModal} onClose={() => setShowDataModal(false)} />
     </div>
   );
 }

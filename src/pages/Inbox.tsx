@@ -5,6 +5,7 @@ import { FilterBar } from '../components/task/TaskInput';
 import { TaskList } from '../components/task/TaskList';
 import { FloatingInput } from '../components/task/TaskInput';
 import { applyTaskQuery } from '../lib/taskQuery';
+import { PageBody } from '../components/layout/PageBody';
 
 export default function Inbox() {
   const tasks = useTaskStore((s) => s.getInboxTasks());
@@ -31,10 +32,10 @@ export default function Inbox() {
         showViewSwitcher={false}
       />
       <FilterBar />
-      <div className="flex-1 relative overflow-hidden">
+      <PageBody>
         <TaskList tasks={visibleTasks} groupBy="dueDate" />
         <FloatingInput />
-      </div>
+      </PageBody>
     </>
   );
 }

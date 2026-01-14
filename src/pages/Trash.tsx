@@ -4,6 +4,7 @@ import { Header } from '../components/layout/Header';
 import { cn } from '../lib/cn';
 import { useTaskStore, useUIStore } from '../store';
 import { format, parseISO } from 'date-fns';
+import { Button, EmptyState } from '../components/ui';
 
 export default function Trash() {
   const deletedRootTasks = useTaskStore((s) => s.getDeletedRootTasks());
@@ -26,12 +27,11 @@ export default function Trash() {
 
       <div className="flex-1 overflow-y-auto bg-white pb-24 scrollbar-thin">
         {tasks.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-slate-400 pt-20">
-            <div className="text-center">
-              <p className="text-lg font-medium">Trash is empty</p>
-              <p className="text-sm">Deleted tasks will show up here</p>
-            </div>
-          </div>
+          <EmptyState
+            className="pt-20"
+            title="Trash is empty"
+            description="Deleted tasks will show up here"
+          />
         ) : (
           <div className="px-6 py-4 space-y-2">
             {tasks.map((task) => (
@@ -65,25 +65,27 @@ export default function Trash() {
                 </button>
 
                 <div className="px-4 pb-3 flex items-center justify-end gap-2">
-                  <button
+                  <Button
                     type="button"
+                    size="xs"
+                    variant="secondary"
                     onClick={() => restoreTask(task.id)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                    icon={<RotateCcw className="w-3.5 h-3.5" />}
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
                     Restore
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    size="xs"
+                    variant="danger"
                     onClick={() => {
                       if (!confirm('Permanently delete this task and all its subtasks?')) return;
                       hardDeleteTask(task.id);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-red-200 bg-red-50 hover:bg-red-100 text-red-700"
+                    icon={<X className="w-3.5 h-3.5" />}
                   >
-                    <X className="w-3.5 h-3.5" />
                     Delete forever
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -93,4 +95,3 @@ export default function Trash() {
     </>
   );
 }
-

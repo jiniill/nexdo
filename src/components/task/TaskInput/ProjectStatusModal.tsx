@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { cn } from '../../../lib/cn';
 import { useProjectStore, useTaskStore } from '../../../store';
 import { DEFAULT_STATUSES, type Status } from '../../../types';
+import { Modal } from '../../ui';
 
 const COLOR_OPTIONS: Status['color'][] = ['slate', 'blue', 'amber', 'red', 'purple', 'green'];
 
@@ -32,7 +33,6 @@ export function ProjectStatusModal({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         handleSave();
@@ -59,13 +59,12 @@ export function ProjectStatusModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh]">
-      <div
-        className="absolute inset-0 bg-slate-900/50 animate-in fade-in duration-200"
-        onClick={onClose}
-      />
-
-      <div className="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <Modal
+      open={true}
+      onClose={onClose}
+      containerClassName="pt-[12vh]"
+      contentClassName="w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+    >
         <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-900">Statuses</div>
@@ -228,8 +227,6 @@ export function ProjectStatusModal({
             Save
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
-

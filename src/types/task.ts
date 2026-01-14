@@ -26,6 +26,9 @@ export interface Task {
   deletedAt?: string;
   dueDate?: string;
   completedAt?: string;
+  estimatedMinutes?: number;
+  trackedSeconds?: number;
+  trackingStartedAt?: string;
 
   // 반복
   recurrence?: RecurrenceRule;

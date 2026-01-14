@@ -1,4 +1,5 @@
-import { Link, isRouteErrorResponse, useRouteError } from 'react-router-dom';
+import { isRouteErrorResponse, useRouteError } from 'react-router-dom';
+import { Button, LinkButton } from '../components/ui';
 
 export default function ErrorPage() {
   const error = useRouteError();
@@ -31,22 +32,25 @@ export default function ErrorPage() {
         )}
 
         <div className="mt-6 flex items-center justify-center gap-3">
-          <button
+          <Button
             type="button"
             onClick={() => window.location.reload()}
-            className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+            variant="neutral"
+            size="lg"
+            className="rounded-lg"
           >
             Reload
-          </button>
-          <Link
+          </Button>
+          <LinkButton
             to="/"
-            className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+            variant="primary"
+            size="lg"
+            className="rounded-lg"
           >
             Go Home
-          </Link>
+          </LinkButton>
         </div>
       </div>
     </div>
   );
 }
-

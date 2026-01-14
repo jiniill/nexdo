@@ -5,8 +5,12 @@ import { Header } from '../components/layout/Header';
 import { FilterBar } from '../components/task/TaskInput';
 import { TaskList } from '../components/task/TaskList';
 import { TaskBoard } from '../components/task/TaskBoard';
+import { TaskGantt } from '../components/task/TaskGantt';
+import { TaskCalendar } from '../components/task/TaskCalendar';
 import { FloatingInput } from '../components/task/TaskInput';
 import { applyTaskQuery } from '../lib/taskQuery';
+import { PageBody } from '../components/layout/PageBody';
+import { EmptyState } from '../components/ui';
 
 export default function Project() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -31,9 +35,7 @@ export default function Project() {
 
   if (!project) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-slate-400">Project not found</p>
-      </div>
+      <EmptyState title="Project not found" />
     );
   }
 
@@ -48,19 +50,13 @@ export default function Project() {
         showViewSwitcher={true}
       />
       <FilterBar projectId={projectId} />
-      <div className="flex-1 relative overflow-hidden">
+      <PageBody>
         {viewMode === 'list' && <TaskList tasks={visibleTasks} groupBy="dueDate" />}
         {viewMode === 'board' && <TaskBoard tasks={visibleTasks} statuses={project.statuses} />}
-        {viewMode === 'gantt' && (
-          <div className="flex-1 flex items-center justify-center text-slate-400">
-            <div className="text-center">
-              <p className="text-lg font-medium">Gantt view</p>
-              <p className="text-sm">Coming soon</p>
-            </div>
-          </div>
-        )}
+        {viewMode === 'calendar' && <TaskCalendar tasks={visibleTasks} />}
+        {viewMode === 'gantt' && <TaskGantt tasks={visibleTasks} />}
         <FloatingInput projectId={projectId} />
-      </div>
+      </PageBody>
     </>
   );
 }

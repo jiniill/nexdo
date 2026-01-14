@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom';
 import { Home } from 'lucide-react';
+import { LinkButton } from '../components/ui';
 
 export default function NotFound() {
   return (
@@ -7,13 +7,15 @@ export default function NotFound() {
       <div className="text-center">
         <h1 className="text-6xl font-bold text-slate-200 mb-4">404</h1>
         <p className="text-lg text-slate-600 mb-6">Page not found</p>
-        <Link
+        <LinkButton
           to="/"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          variant="primary"
+          size="lg"
+          className="rounded-lg"
+          icon={<Home className="w-4 h-4" />}
         >
-          <Home className="w-4 h-4" />
           Go back home
-        </Link>
+        </LinkButton>
       </div>
     </div>
   );

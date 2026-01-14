@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Timer } from 'lucide-react';
 import type { Status, Task } from '../../../types';
 import { cn } from '../../../lib/cn';
 import { useTaskStore, useUIStore } from '../../../store';
 import { StatusBadge } from '../../ui';
+import { formatDurationShort } from '../../../lib/time';
 
 interface TaskBoardProps {
   tasks: Task[];
@@ -229,6 +230,12 @@ export function TaskBoard({ tasks, statuses, onAddTask }: TaskBoardProps) {
                             <span>{t.childIds.filter((id) => allTasks[id] && !allTasks[id].deletedAt).length} sub</span>
                           )}
                           {t.dueDate && <span>{t.dueDate.slice(0, 10)}</span>}
+                          {(t.trackedSeconds || t.trackingStartedAt) && (
+                            <span className={cn('inline-flex items-center gap-1', t.trackingStartedAt && 'text-green-600')}>
+                              <Timer className="w-3.5 h-3.5" />
+                              {t.trackedSeconds ? formatDurationShort(t.trackedSeconds) : 'Tracking'}
+                            </span>
+                          )}
                         </div>
                       </button>
                     ))

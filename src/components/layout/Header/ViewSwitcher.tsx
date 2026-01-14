@@ -1,13 +1,14 @@
-import { List, Kanban, Calendar } from 'lucide-react';
+import { List, Kanban, Calendar, ChartGantt } from 'lucide-react';
 import { cn } from '../../../lib/cn';
 import { useUIStore } from '../../../store';
 
-type ViewMode = 'list' | 'board' | 'gantt';
+type ViewMode = 'list' | 'board' | 'calendar' | 'gantt';
 
 const views: { id: ViewMode; icon: typeof List; label: string }[] = [
   { id: 'list', icon: List, label: 'List' },
   { id: 'board', icon: Kanban, label: 'Board' },
-  { id: 'gantt', icon: Calendar, label: 'Gantt' },
+  { id: 'calendar', icon: Calendar, label: 'Calendar' },
+  { id: 'gantt', icon: ChartGantt, label: 'Gantt' },
 ];
 
 export function ViewSwitcher() {

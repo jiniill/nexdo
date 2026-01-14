@@ -8,6 +8,7 @@ import Urgent from './pages/Urgent';
 import Assigned from './pages/Assigned';
 import Overdue from './pages/Overdue';
 import Trash from './pages/Trash';
+import Reports from './pages/Reports';
 import NotFound from './pages/NotFound';
 import ErrorPage from './pages/ErrorPage';
 
@@ -24,6 +25,7 @@ export const router = createBrowserRouter([
       { path: 'assigned', element: <Assigned /> },
       { path: 'overdue', element: <Overdue /> },
       { path: 'trash', element: <Trash /> },
+      { path: 'reports', element: <Reports /> },
       { path: 'project/:projectId', element: <Project /> },
     ],
   },

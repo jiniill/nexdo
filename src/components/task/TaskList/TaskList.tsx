@@ -4,6 +4,7 @@ import type { Task } from '../../../types';
 import { DEFAULT_STATUSES } from '../../../types';
 import { TaskSection } from './TaskSection';
 import { isThisWeek, parseISO, isPast, isFuture } from 'date-fns';
+import { EmptyState } from '../../ui';
 
 interface TaskListProps {
   tasks: Task[];
@@ -80,12 +81,11 @@ export function TaskList({ tasks, groupBy = 'dueDate' }: TaskListProps) {
 
   if (tasks.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-slate-400 pt-20">
-        <div className="text-center">
-          <p className="text-lg font-medium">No tasks yet</p>
-          <p className="text-sm">Add a task to get started</p>
-        </div>
-      </div>
+      <EmptyState
+        className="pt-20"
+        title="No tasks yet"
+        description="Add a task to get started"
+      />
     );
   }
 

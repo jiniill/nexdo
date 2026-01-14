@@ -24,6 +24,7 @@ export function TaskItem({ task, isLast = false }: TaskItemProps) {
   const setTaskSort = useUIStore((s) => s.setTaskSort);
   const setDraggingTask = useUIStore((s) => s.setDraggingTask);
   const clearDraggingTask = useUIStore((s) => s.clearDraggingTask);
+  const activeDrag = useUIStore((s) => s.draggingTask);
   const tasks = useTaskStore((s) => s.tasks);
   const rootTaskIds = useTaskStore((s) => s.rootTaskIds);
   const moveTask = useTaskStore((s) => s.moveTask);
@@ -41,6 +42,7 @@ export function TaskItem({ task, isLast = false }: TaskItemProps) {
   const isCompleted = task.statusId === 'done';
   const statuses = projectStatuses ?? DEFAULT_STATUSES;
   const status = statuses.find((s) => s.id === task.statusId) || statuses[0];
+  const isTracking = !!task.trackingStartedAt;
 
   const visibleChildIds = task.childIds.filter((id) => {
     const child = tasks[id];
@@ -239,11 +241,11 @@ export function TaskItem({ task, isLast = false }: TaskItemProps) {
       }}
       className={cn(
         'group flex items-center gap-3 px-6 py-2.5 border-b border-slate-100',
-        'hover:bg-slate-50 transition-colors relative',
+        'transition-colors relative',
+        !activeDrag && 'hover:bg-slate-50',
         isCompleted && 'opacity-60 hover:opacity-100',
         'cursor-grab active:cursor-grabbing',
         isDragging && 'cursor-grabbing',
-        isDragOver && dropMode === 'reorder' && 'bg-indigo-50',
         isDragOver && dropMode === 'nest' && 'bg-indigo-50 ring-1 ring-indigo-300'
       )}
       style={{ paddingLeft: `${task.depth * 32 + 24}px` }}
@@ -300,6 +302,8 @@ export function TaskItem({ task, isLast = false }: TaskItemProps) {
           statusId={task.statusId}
           statusName={status.name}
           statusColor={status.color}
+          trackedSeconds={task.trackedSeconds}
+          isTracking={isTracking}
         />
       )}
 

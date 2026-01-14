@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { Calendar, Timer, Flag, ChevronDown, Check, Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Calendar, Timer, Flag, ChevronDown, Check, Users, Repeat, X } from 'lucide-react';
 import { useProjectStore, useTaskStore, useUIStore, useUserStore } from '../../../store';
 import { AvatarStack, StatusBadge } from '../../ui';
-import { DEFAULT_STATUSES, PRIORITY_CONFIG, type Priority } from '../../../types';
+import { DEFAULT_STATUSES, PRIORITY_CONFIG, type Priority, type RecurrenceRule } from '../../../types';
 import { format, parseISO } from 'date-fns';
 import { cn } from '../../../lib/cn';
+import { Button } from '../../ui';
+import { computeTrackedSeconds, formatDurationShort } from '../../../lib/time';
+import { useClickOutside } from '../../../lib/hooks/useClickOutside';
 
 export function PropertyGrid() {
   const selectedTaskId = useUIStore((s) => s.selectedTaskId);
@@ -16,15 +19,28 @@ export function PropertyGrid() {
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
   const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
+  const [showRecurrenceMenu, setShowRecurrenceMenu] = useState(false);
 
   const statusRef = useRef<HTMLDivElement>(null);
   const priorityRef = useRef<HTMLDivElement>(null);
   const assigneeRef = useRef<HTMLDivElement>(null);
+  const recurrenceRef = useRef<HTMLDivElement>(null);
+
+  const startTracking = useTaskStore((s) => s.startTracking);
+  const stopTracking = useTaskStore((s) => s.stopTracking);
 
   const statuses = project?.statuses ?? DEFAULT_STATUSES;
   const status = task ? statuses.find((s) => s.id === task.statusId) || statuses[0] : statuses[0];
   const priorityConfig = PRIORITY_CONFIG[task?.priority ?? 'none'];
   const dueDateValue = task?.dueDate ? task.dueDate.slice(0, 10) : '';
+  const isTracking = !!task?.trackingStartedAt;
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!isTracking) return;
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [isTracking]);
 
   const assigneeAvatars =
     task?.assigneeIds
@@ -34,27 +50,34 @@ export function PropertyGrid() {
       })
       .filter(Boolean) ?? [];
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as Node;
-      if (statusRef.current && !statusRef.current.contains(target)) {
-        setShowStatusMenu(false);
-      }
-      if (priorityRef.current && !priorityRef.current.contains(target)) {
-        setShowPriorityMenu(false);
-      }
-      if (assigneeRef.current && !assigneeRef.current.contains(target)) {
-        setShowAssigneeMenu(false);
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+  const menuRefs = useMemo(() => [statusRef, priorityRef, assigneeRef, recurrenceRef], []);
+  const anyMenuOpen = showStatusMenu || showPriorityMenu || showAssigneeMenu || showRecurrenceMenu;
+  const handleOutside = useCallback(() => {
+    setShowStatusMenu(false);
+    setShowPriorityMenu(false);
+    setShowAssigneeMenu(false);
+    setShowRecurrenceMenu(false);
   }, []);
+  useClickOutside({ refs: menuRefs, onOutside: handleOutside, enabled: anyMenuOpen });
 
   const priorityOptions: Priority[] = ['urgent', 'high', 'medium', 'low', 'none'];
+  const recurrence = task?.recurrence;
+  const [draftRecurrence, setDraftRecurrence] = useState<RecurrenceRule>({ frequency: 'weekly', interval: 1 });
 
   if (!task) return null;
+
+  const trackedSeconds = (() => {
+    if (!task) return 0;
+    return computeTrackedSeconds(task, nowTick);
+  })();
+
+  const recurrenceLabel = (() => {
+    if (!recurrence) return 'No repeat';
+    const r = recurrence;
+    const unit = r.frequency === 'daily' ? 'day' : r.frequency === 'weekly' ? 'week' : 'month';
+    const every = r.interval === 1 ? `Every ${unit}` : `Every ${r.interval} ${unit}s`;
+    return r.endDate ? `${every} (until ${r.endDate})` : every;
+  })();
 
   return (
     <div className="grid grid-cols-3 gap-y-4 gap-x-2 text-sm">
@@ -246,7 +269,157 @@ export function PropertyGrid() {
         </div>
         <div className="flex items-center gap-2 text-slate-500 text-xs">
           <Timer className="w-3.5 h-3.5 text-slate-400" />
-          <span>Est. -- / Tracked --</span>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-slate-500">Est.</span>
+            <input
+              type="number"
+              min={0}
+              value={task.estimatedMinutes ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  updateTask(task.id, { estimatedMinutes: undefined });
+                  return;
+                }
+                const n = Number.parseInt(raw, 10);
+                updateTask(task.id, { estimatedMinutes: Number.isFinite(n) ? Math.max(0, n) : undefined });
+              }}
+              className="w-20 text-xs text-slate-600 rounded-md border border-slate-200 bg-white px-2 py-1 hover:border-slate-300"
+              placeholder="min"
+              aria-label="Estimated minutes"
+            />
+            <span className="text-slate-500">Tracked</span>
+            <span className="text-slate-700">{formatDurationShort(trackedSeconds)}</span>
+
+            <span className="ml-auto">
+              {isTracking ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="danger"
+                  onClick={() => stopTracking(task.id)}
+                >
+                  Stop
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="success"
+                  onClick={() => startTracking(task.id)}
+                >
+                  Start
+                </Button>
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Repeat */}
+      <div className="text-slate-500 font-medium col-span-1 py-1">Repeat</div>
+      <div className="col-span-2">
+        <div className="relative inline-block" ref={recurrenceRef}>
+          <button
+            type="button"
+            onClick={() => {
+              setShowRecurrenceMenu((v) => {
+                const next = !v;
+                if (next) {
+                  setDraftRecurrence(recurrence ?? { frequency: 'weekly', interval: 1 });
+                }
+                return next;
+              });
+              setShowStatusMenu(false);
+              setShowPriorityMenu(false);
+              setShowAssigneeMenu(false);
+            }}
+            className="inline-flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+          >
+            <span className={cn('inline-flex items-center gap-1 text-xs', recurrence ? 'text-slate-700' : 'text-slate-400')}>
+              <Repeat className="w-3.5 h-3.5" />
+              {recurrenceLabel}
+            </span>
+            <ChevronDown className={cn('w-3.5 h-3.5 text-slate-400 transition-transform', showRecurrenceMenu && 'rotate-180')} />
+          </button>
+
+          {showRecurrenceMenu && (
+            <div className="absolute top-full left-0 mt-1 w-72 bg-white rounded-lg shadow-lg border border-slate-200 p-3 z-50">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Repeat</div>
+                {task.recurrence && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateTask(task.id, { recurrence: undefined });
+                      setDraftRecurrence({ frequency: 'weekly', interval: 1 });
+                      setShowRecurrenceMenu(false);
+                    }}
+                    className="text-xs text-slate-400 hover:text-red-600 inline-flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className="text-xs text-slate-500">
+                  Frequency
+                  <select
+                    value={draftRecurrence.frequency}
+                    onChange={(e) =>
+                      setDraftRecurrence((prev) => ({ ...prev, frequency: e.target.value as RecurrenceRule['frequency'] }))
+                    }
+                    className="mt-1 w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-white text-slate-700"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </label>
+
+                <label className="text-xs text-slate-500">
+                  Interval
+                  <input
+                    type="number"
+                    min={1}
+                    value={draftRecurrence.interval}
+                    onChange={(e) => {
+                      const next = Number.parseInt(e.target.value || '1', 10);
+                      setDraftRecurrence((prev) => ({ ...prev, interval: Number.isFinite(next) ? Math.max(1, next) : 1 }));
+                    }}
+                    className="mt-1 w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-white text-slate-700"
+                  />
+                </label>
+              </div>
+
+              <label className="mt-2 block text-xs text-slate-500">
+                End date (optional)
+                <input
+                  type="date"
+                  value={draftRecurrence.endDate ?? ''}
+                  onChange={(e) =>
+                    setDraftRecurrence((prev) => ({ ...prev, endDate: e.target.value || undefined }))
+                  }
+                  className="mt-1 w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-white text-slate-700"
+                />
+              </label>
+
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateTask(task.id, { recurrence: { ...draftRecurrence, interval: Math.max(1, draftRecurrence.interval || 1) } });
+                    setShowRecurrenceMenu(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary-600 hover:bg-primary-700 text-white"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

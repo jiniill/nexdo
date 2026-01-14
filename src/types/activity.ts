@@ -4,7 +4,9 @@ export type TaskActivityType =
   | 'status_change'
   | 'completed'
   | 'reopened'
-  | 'updated';
+  | 'updated'
+  | 'tracking_started'
+  | 'tracking_stopped';
 
 export interface TaskActivity {
   id: string;

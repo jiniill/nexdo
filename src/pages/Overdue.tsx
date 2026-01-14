@@ -6,6 +6,7 @@ import { FilterBar } from '../components/task/TaskInput';
 import { TaskList } from '../components/task/TaskList';
 import { FloatingInput } from '../components/task/TaskInput';
 import { applyTaskQuery } from '../lib/taskQuery';
+import { PageBody } from '../components/layout/PageBody';
 
 export default function Overdue() {
   const tasks = useTaskStore((s) =>
@@ -40,10 +41,10 @@ export default function Overdue() {
         showViewSwitcher={false}
       />
       <FilterBar />
-      <div className="flex-1 relative overflow-hidden">
+      <PageBody>
         <TaskList tasks={visibleTasks} groupBy="dueDate" />
         <FloatingInput />
-      </div>
+      </PageBody>
     </>
   );
 }
