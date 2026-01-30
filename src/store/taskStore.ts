@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { addDays, addMonths, addWeeks, format, isValid, parseISO } from 'date-fns';
 import { DEFAULT_STATUSES, type RecurrenceRule, type Task, type Priority } from '../types';
 import { useActivityStore } from './activityStore';
+import { useTimeStore } from './timeStore';
 import { useUserStore } from './userStore';
 import { taskRepository } from '../data/repositories';
 
@@ -237,6 +238,7 @@ export const useTaskStore = create<TaskState>()(
             }
 
             useActivityStore.getState().clearTask(taskId);
+            useTimeStore.getState().clearTask(taskId);
             delete state.tasks[taskId];
           };
 
@@ -283,13 +285,15 @@ export const useTaskStore = create<TaskState>()(
         const wasDone = task.statusId === 'done';
         const shouldSpawnNext = !wasDone && !!task.recurrence;
         const wasTracking = !!task.trackingStartedAt;
+        const completedAtIso = new Date().toISOString();
+        const stoppedSessions: Array<{ taskId: string; startedAt: string; endedAt: string; durationSeconds: number }> = [];
 
         set((state) => {
           const draft = state.tasks[id];
           if (!draft) return;
 
           const newStatus = wasDone ? 'todo' : 'done';
-          const now = new Date().toISOString();
+          const now = completedAtIso;
 
           const markDoneRecursive = (taskId: string) => {
             const t = state.tasks[taskId];
@@ -303,10 +307,14 @@ export const useTaskStore = create<TaskState>()(
             }
 
             if (t.trackingStartedAt) {
+              const startedAt = t.trackingStartedAt;
               const startedMs = Date.parse(t.trackingStartedAt);
               if (Number.isFinite(startedMs)) {
                 const deltaSec = Math.max(0, Math.floor((Date.parse(now) - startedMs) / 1000));
                 t.trackedSeconds = (t.trackedSeconds ?? 0) + deltaSec;
+                if (deltaSec > 0) {
+                  stoppedSessions.push({ taskId: t.id, startedAt, endedAt: now, durationSeconds: deltaSec });
+                }
               }
               t.trackingStartedAt = undefined;
             }
@@ -416,6 +424,10 @@ export const useTaskStore = create<TaskState>()(
             actorUserId: useUserStore.getState().currentUserId,
           });
         }
+
+        stoppedSessions.forEach((s) => {
+          useTimeStore.getState().addSession(s);
+        });
       },
 
       startTracking: (id) => {
@@ -423,6 +435,7 @@ export const useTaskStore = create<TaskState>()(
         const nowMs = Date.now();
         const actorUserId = useUserStore.getState().currentUserId;
         const stoppedIds: string[] = [];
+        const stoppedSessions: Array<{ taskId: string; startedAt: string; endedAt: string; durationSeconds: number }> = [];
         let didStart = false;
 
         set((state) => {
@@ -438,6 +451,7 @@ export const useTaskStore = create<TaskState>()(
               t.trackingStartedAt = undefined;
               return;
             }
+            const startedAt = t.trackingStartedAt;
             const startedMs = Date.parse(t.trackingStartedAt);
             if (!Number.isFinite(startedMs)) {
               t.trackingStartedAt = undefined;
@@ -449,6 +463,9 @@ export const useTaskStore = create<TaskState>()(
             t.trackingStartedAt = undefined;
             t.updatedAt = nowIso;
             stoppedIds.push(t.id);
+            if (deltaSec > 0) {
+              stoppedSessions.push({ taskId: t.id, startedAt, endedAt: nowIso, durationSeconds: deltaSec });
+            }
           });
 
           target.trackingStartedAt = nowIso;
@@ -463,6 +480,9 @@ export const useTaskStore = create<TaskState>()(
             useActivityStore.getState().addActivity({ taskId, type: 'tracking_stopped', actorUserId });
           });
           useActivityStore.getState().addActivity({ taskId: id, type: 'tracking_started', actorUserId });
+          stoppedSessions.forEach((s) => {
+            useTimeStore.getState().addSession(s);
+          });
         }
       },
 
@@ -470,6 +490,7 @@ export const useTaskStore = create<TaskState>()(
         const nowIso = new Date().toISOString();
         const nowMs = Date.now();
         const actorUserId = useUserStore.getState().currentUserId;
+        const stoppedSessions: Array<{ taskId: string; startedAt: string; endedAt: string; durationSeconds: number }> = [];
         let didStop = false;
 
         set((state) => {
@@ -477,6 +498,7 @@ export const useTaskStore = create<TaskState>()(
           if (!task) return;
           if (!task.trackingStartedAt) return;
 
+          const startedAt = task.trackingStartedAt;
           const startedMs = Date.parse(task.trackingStartedAt);
           if (!Number.isFinite(startedMs)) {
             task.trackingStartedAt = undefined;
@@ -489,10 +511,16 @@ export const useTaskStore = create<TaskState>()(
           task.trackingStartedAt = undefined;
           task.updatedAt = nowIso;
           didStop = true;
+          if (deltaSec > 0) {
+            stoppedSessions.push({ taskId: id, startedAt, endedAt: nowIso, durationSeconds: deltaSec });
+          }
         });
 
         if (didStop) {
           useActivityStore.getState().addActivity({ taskId: id, type: 'tracking_stopped', actorUserId });
+          stoppedSessions.forEach((s) => {
+            useTimeStore.getState().addSession(s);
+          });
         }
       },
 

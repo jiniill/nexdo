@@ -39,3 +39,7 @@ npm run lint
 - 현재 데이터는 브라우저 `localStorage`에 저장됩니다.
   - `nexdo-tasks`
   - `nexdo-projects`
+  - `nexdo-activities`
+  - `nexdo-time-sessions`
+  - `nexdo-users`
+  - `nexdo-ui`

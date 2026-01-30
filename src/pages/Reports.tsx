@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, Timer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { startOfDay, startOfMonth, startOfWeek } from 'date-fns';
 import { Header } from '../components/layout/Header';
 import { PageBody } from '../components/layout/PageBody';
 import { EmptyState } from '../components/ui';
-import { useProjectStore, useTaskStore, useUIStore } from '../store';
+import { useProjectStore, useTaskStore, useTimeStore, useUIStore } from '../store';
 import { computeTrackedSeconds, formatDurationShort } from '../lib/time';
 import { cn } from '../lib/cn';
 
@@ -13,8 +14,10 @@ export default function Reports() {
   const openInspector = useUIStore((s) => s.openInspector);
   const allTasksMap = useTaskStore((s) => s.tasks);
   const projects = useProjectStore((s) => s.getAllProjects());
+  const sessions = useTimeStore((s) => s.sessions);
 
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [range, setRange] = useState<'today' | 'week' | 'month' | 'all'>('week');
 
   const hasActiveTracking = useMemo(() => {
     return Object.values(allTasksMap).some((t) => !!t.trackingStartedAt && !t.deletedAt);
@@ -29,14 +32,63 @@ export default function Reports() {
 
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
 
+  const rangeWindow = useMemo(() => {
+    const now = new Date(nowTick);
+    const endMs = nowTick;
+    const startMs =
+      range === 'today'
+        ? startOfDay(now).getTime()
+        : range === 'week'
+          ? startOfWeek(now, { weekStartsOn: 1 }).getTime()
+          : range === 'month'
+            ? startOfMonth(now).getTime()
+            : 0;
+    return { startMs, endMs };
+  }, [nowTick, range]);
+
   const report = useMemo(() => {
     const tasks = Object.values(allTasksMap).filter((t) => !t.deletedAt);
+
+    const sessionsByTaskId = new Map<string, number>();
+
+    if (range !== 'all') {
+      const startMs = rangeWindow.startMs;
+      const endMs = rangeWindow.endMs;
+
+      sessions.forEach((s) => {
+        const startedMs = Date.parse(s.startedAt);
+        const endedMs = Date.parse(s.endedAt);
+        if (!Number.isFinite(startedMs) || !Number.isFinite(endedMs)) return;
+        const overlapStart = Math.max(startMs, startedMs);
+        const overlapEnd = Math.min(endMs, endedMs);
+        const overlap = Math.max(0, Math.floor((overlapEnd - overlapStart) / 1000));
+        if (overlap <= 0) return;
+        sessionsByTaskId.set(s.taskId, (sessionsByTaskId.get(s.taskId) ?? 0) + overlap);
+      });
+
+      // In-flight tracking time (not yet persisted as a session).
+      tasks.forEach((t) => {
+        if (!t.trackingStartedAt) return;
+        const startedMs = Date.parse(t.trackingStartedAt);
+        if (!Number.isFinite(startedMs)) return;
+        const overlapStart = Math.max(startMs, startedMs);
+        const overlapEnd = endMs;
+        const overlap = Math.max(0, Math.floor((overlapEnd - overlapStart) / 1000));
+        if (overlap <= 0) return;
+        sessionsByTaskId.set(t.id, (sessionsByTaskId.get(t.id) ?? 0) + overlap);
+      });
+    }
+
     const rows = tasks
-      .map((t) => ({
-        task: t,
-        trackedSeconds: computeTrackedSeconds(t, nowTick),
-        estimatedMinutes: t.estimatedMinutes ?? 0,
-      }))
+      .map((t) => {
+        const trackedSeconds =
+          range === 'all' ? computeTrackedSeconds(t, nowTick) : (sessionsByTaskId.get(t.id) ?? 0);
+        return {
+          task: t,
+          trackedSeconds,
+          estimatedMinutes: t.estimatedMinutes ?? 0,
+        };
+      })
       .filter((r) => r.trackedSeconds > 0 || r.estimatedMinutes > 0);
 
     const totalTrackedSeconds = rows.reduce((acc, r) => acc + r.trackedSeconds, 0);
@@ -66,18 +118,25 @@ export default function Reports() {
       .sort((a, b) => b.trackedSeconds - a.trackedSeconds)
       .slice(0, 12);
 
-    const active = rows.find((r) => !!r.task.trackingStartedAt) ?? null;
+    const active = tasks.find((t) => !!t.trackingStartedAt) ?? null;
 
     return { totalTrackedSeconds, totalEstimatedMinutes, projectRows, topTasks, active };
-  }, [allTasksMap, nowTick, projectById]);
+  }, [allTasksMap, nowTick, projectById, range, rangeWindow.endMs, rangeWindow.startMs, sessions]);
 
-  const hasAny = report.totalTrackedSeconds > 0 || report.totalEstimatedMinutes > 0;
+  const hasAnyOverall = useMemo(() => {
+    const tasks = Object.values(allTasksMap).filter((t) => !t.deletedAt);
+    if (sessions.length > 0) return true;
+    return tasks.some((t) => (t.trackedSeconds ?? 0) > 0 || !!t.trackingStartedAt || (t.estimatedMinutes ?? 0) > 0);
+  }, [allTasksMap, sessions.length]);
+
+  const hasAnyInRange = report.totalTrackedSeconds > 0 || report.totalEstimatedMinutes > 0;
+  const rangeLabel = range === 'today' ? 'Today' : range === 'week' ? 'This week' : range === 'month' ? 'This month' : 'All time';
 
   return (
     <>
       <Header breadcrumbs={[{ label: 'Reports' }]} showViewSwitcher={false} />
       <PageBody>
-        {!hasAny ? (
+        {!hasAnyOverall ? (
           <EmptyState title="No data yet" description="Start tracking time or add an estimate to see reports." />
         ) : (
           <div className="px-6 py-6 space-y-6">
@@ -88,26 +147,57 @@ export default function Reports() {
                   <h1 className="text-lg font-semibold">Time report</h1>
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
-                  Totals are based on per-task tracked time (no per-day history yet).
+                  {range === 'all'
+                    ? 'All-time totals use each task’s tracked total.'
+                    : 'Range totals are based on recorded tracking sessions (legacy totals are not backfilled).'
+                  }
                 </div>
               </div>
 
-              {report.active && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-200 bg-green-50">
-                  <Timer className="w-4 h-4 text-green-600" />
-                  <div className="text-sm text-slate-700">
-                    <span className="font-medium">Tracking:</span>{' '}
-                    <span className="tabular-nums text-green-700">{formatDurationShort(report.active.trackedSeconds)}</span>
-                    <span className="text-slate-400"> · </span>
-                    <span className="text-slate-600">{report.active.task.title}</span>
-                  </div>
+              <div className="flex items-center gap-3 flex-wrap justify-end">
+                <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
+                  {(['today', 'week', 'month', 'all'] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setRange(k)}
+                      className={cn(
+                        'px-2.5 py-1 text-xs rounded-md border transition-colors',
+                        range === k
+                          ? 'bg-primary-50 text-primary-700 border-primary-200'
+                          : 'bg-white text-slate-600 border-transparent hover:bg-slate-50 hover:border-slate-200'
+                      )}
+                    >
+                      {k === 'today' ? 'Today' : k === 'week' ? 'Week' : k === 'month' ? 'Month' : 'All'}
+                    </button>
+                  ))}
                 </div>
-              )}
+
+                {report.active && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-200 bg-green-50">
+                    <Timer className="w-4 h-4 text-green-600" />
+                    <div className="text-sm text-slate-700">
+                      <span className="font-medium">Tracking:</span>{' '}
+                      <span className="tabular-nums text-green-700">
+                        {formatDurationShort(computeTrackedSeconds(report.active, nowTick))}
+                      </span>
+                      <span className="text-slate-400"> · </span>
+                      <span className="text-slate-600">{report.active.title}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {!hasAnyInRange && (
+              <div className="rounded-xl bg-white border border-slate-200 p-4 text-sm text-slate-500">
+                No tracked/estimated time in the selected range.
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-xl bg-white border border-slate-200 p-4">
-                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tracked</div>
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tracked · {rangeLabel}</div>
                 <div className="mt-2 text-2xl font-semibold text-slate-900 tabular-nums">
                   {formatDurationShort(report.totalTrackedSeconds)}
                 </div>

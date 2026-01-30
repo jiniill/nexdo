@@ -11,6 +11,7 @@
 
 ### 최근 업데이트(요약)
 - Reports 페이지 추가(프로젝트별/태스크별 tracked 집계): `/reports`
+- Reports에 기간 선택(Today/Week/Month/All) 추가 + 기간 합계는 타이머 세션 기반으로 계산
 - 드롭다운/메뉴의 “클릭 아웃사이드 닫기” 로직을 `useClickOutside` 훅으로 공통화
 - 헤더에 “현재 트래킹 중” 인디케이터(바로 이동/Stop) 추가
 - 빠른 캡처에서 repeat 토큰 파싱(예: `매일`, `repeat:2w`, `until:YYYY-MM-DD`)
@@ -23,7 +24,8 @@
 - 캘린더/간트에서 due date 드래그로 변경(HTML5 drag & drop)
 - 반복(Repeat) MVP: 완료 시 다음 회차 생성(일/주/월, interval, end date)
 - 타임 트래킹 MVP: 단일 활성 타이머 정책, 추적 시간 누적, 활동 로그(시작/정지) 기록, Inspector 제어
-- Reports(초기 버전): tracked/estimate 집계, 프로젝트별/태스크별 랭킹(일자별 히스토리는 아직 없음)
+- 타이머 세션 기록: 트래킹 stop 시 세션을 저장(기간 리포트의 기반 데이터)
+- Reports: 기간(Today/Week/Month/All) 기준 집계, 프로젝트별/태스크별 랭킹
 - 오버레이/모달: 공통 `Portal`/`Modal` 도입으로 z-index 충돌/중복 코드 정리
 - 빠른 캡처: `#project`, `@assignee`, `!priority`, `today/tomorrow/오늘/내일/YYYY-MM-DD` + 반복 토큰 일부 파싱
 
@@ -63,9 +65,10 @@
 
 ### 2-1. 타임 트래킹 v1(개인 생산성)
 - 리포트/집계
-  - (완료) 기본 Reports 페이지(프로젝트/태스크별 tracked 집계)
-  - (남음) 오늘/이번주/이번달 합계(일자별 히스토리 필요)
-  - (남음) 프로젝트/태그/담당자별 합계 고도화(필터/기간)
+  - (완료) Reports 페이지 + 기간 선택(Today/Week/Month/All)
+  - (완료) 타이머 세션 저장(기간 집계 가능)
+  - (남음) 일자별 히스토리 시각화(예: 일별 바 차트/트렌드)
+  - (남음) 프로젝트/태그/담당자별 합계 고도화(필터/기간 프리셋)
   - (남음) 예상(estimate) vs 실제(tracked) 비교(프로젝트 단위 등)
 - 포모도로(옵션)
   - 25/5, 커스텀 세션, 알림/사운드(웹)

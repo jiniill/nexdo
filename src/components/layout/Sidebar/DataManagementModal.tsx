@@ -2,11 +2,10 @@ import { useMemo, useState } from 'react';
 import { Download, Upload, X, RotateCcw } from 'lucide-react';
 import { cn } from '../../../lib/cn';
 import { Button, Modal } from '../../ui';
-import { useActivityStore, useProjectStore, useTaskStore, useUIStore, useUserStore } from '../../../store';
-import { activityRepository, projectRepository, taskRepository, uiRepository, userRepository } from '../../../data/repositories';
+import { useActivityStore, useProjectStore, useTaskStore, useTimeStore, useUIStore, useUserStore } from '../../../store';
+import { activityRepository, projectRepository, taskRepository, timeRepository, uiRepository, userRepository } from '../../../data/repositories';
 
-type ExportBundleV1 = {
-  version: 1;
+type ExportBundleBase = {
   exportedAt: string;
   tasks: ReturnType<typeof taskRepository.load>;
   projects: ReturnType<typeof projectRepository.load>;
@@ -14,6 +13,17 @@ type ExportBundleV1 = {
   users: ReturnType<typeof userRepository.load>;
   ui: ReturnType<typeof uiRepository.load>;
 };
+
+type ExportBundleV1 = ExportBundleBase & {
+  version: 1;
+};
+
+type ExportBundleV2 = ExportBundleBase & {
+  version: 2;
+  time: ReturnType<typeof timeRepository.load>;
+};
+
+type ExportBundle = ExportBundleV1 | ExportBundleV2;
 
 function safeJsonParse(value: string): { ok: true; data: unknown } | { ok: false; error: string } {
   try {
@@ -47,21 +57,22 @@ export function DataManagementModal({ open, onClose }: { open: boolean; onClose:
   }, []);
 
   const handleExport = () => {
-    const bundle: ExportBundleV1 = {
-      version: 1,
+    const bundle: ExportBundleV2 = {
+      version: 2,
       exportedAt: new Date().toISOString(),
       tasks: taskRepository.load(),
       projects: projectRepository.load(),
       activities: activityRepository.load(),
       users: userRepository.load(),
       ui: uiRepository.load(),
+      time: timeRepository.load(),
     };
     const text = JSON.stringify(bundle, null, 2);
     setExportText(text);
     setError(null);
   };
 
-  const applyImportedState = (bundle: ExportBundleV1) => {
+  const applyImportedState = (bundle: ExportBundle) => {
     // Minimal sanitation: drop root IDs that don't exist.
     const tasks = bundle.tasks;
     const taskIds = new Set(Object.keys(tasks.tasks ?? {}));
@@ -70,6 +81,7 @@ export function DataManagementModal({ open, onClose }: { open: boolean; onClose:
     useTaskStore.setState({ tasks: tasks.tasks ?? {}, rootTaskIds });
     useProjectStore.setState({ projects: bundle.projects.projects ?? {} });
     useActivityStore.setState({ activitiesByTaskId: bundle.activities.activitiesByTaskId ?? {} });
+    useTimeStore.setState({ sessions: bundle.version === 2 ? bundle.time.sessions ?? [] : [] });
     const users = bundle.users.users ?? {};
     const importedCurrent = bundle.users.currentUserId ?? null;
     const currentUserId =
@@ -98,8 +110,8 @@ export function DataManagementModal({ open, onClose }: { open: boolean; onClose:
       return;
     }
 
-    const data = parsed.data as Partial<ExportBundleV1>;
-    if (data.version !== 1) {
+    const data = parsed.data as Partial<ExportBundle>;
+    if (data.version !== 1 && data.version !== 2) {
       setError('Unsupported backup version.');
       return;
     }
@@ -110,7 +122,7 @@ export function DataManagementModal({ open, onClose }: { open: boolean; onClose:
 
     if (!confirm('Import will overwrite your current local data. Continue?')) return;
 
-    applyImportedState(data as ExportBundleV1);
+    applyImportedState(data as ExportBundle);
     setImportText('');
     setError(null);
     onClose();
@@ -121,6 +133,7 @@ export function DataManagementModal({ open, onClose }: { open: boolean; onClose:
     localStorage.removeItem('nexdo-tasks');
     localStorage.removeItem('nexdo-projects');
     localStorage.removeItem('nexdo-activities');
+    localStorage.removeItem('nexdo-time-sessions');
     localStorage.removeItem('nexdo-users');
     localStorage.removeItem('nexdo-ui');
     window.location.reload();
